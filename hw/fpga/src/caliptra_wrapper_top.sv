@@ -20,20 +20,59 @@
 `include "caliptra_macros.svh"
 
 import caliptra_fpga_realtime_regs_pkg::*;
+import soc_ifc_pkg::*;
 
 module caliptra_wrapper_top (
     input bit core_clk,
     
-    // Caliptra APB Interface
-    input  wire [`CALIPTRA_APB_ADDR_WIDTH-1:0] PADDR,
-    input  wire                       PENABLE,
-    input  wire [2:0]                 PPROT,
-    output wire [`CALIPTRA_APB_DATA_WIDTH-1:0] PRDATA,
-    output wire                       PREADY,
-    input  wire                       PSEL,
-    output wire                       PSLVERR,
-    input  wire [`CALIPTRA_APB_DATA_WIDTH-1:0] PWDATA,
-    input  wire                       PWRITE,
+    //// Caliptra APB Interface
+    //input  wire [`CALIPTRA_APB_ADDR_WIDTH-1:0] PADDR,
+    //input  wire                       PENABLE,
+    //input  wire [2:0]                 PPROT,
+    //output wire [`CALIPTRA_APB_DATA_WIDTH-1:0] PRDATA,
+    //output wire                       PREADY,
+    //input  wire                       PSEL,
+    //output wire                       PSLVERR,
+    //input  wire [`CALIPTRA_APB_DATA_WIDTH-1:0] PWDATA,
+    //input  wire                       PWRITE,
+    // Caliptra AXI Interface
+    input  wire [31:0/*`CALIPTRA_SLAVE_ADDR_WIDTH(`CALIPTRA_SLAVE_SEL_SOC_IFC)-1:0*/] S_AXI_CALIPTRA_AWADDR,
+    input  wire [1:0] S_AXI_CALIPTRA_AWBURST,
+    input  wire [2:0] S_AXI_CALIPTRA_AWSIZE,
+    input  wire [7:0] S_AXI_CALIPTRA_AWLEN,
+    input  wire [31:0/*`CALIPTRA_AXI_USER_WIDTH-1:0*/] S_AXI_CALIPTRA_AWUSER,
+    input  wire [4:0/*`CALIPTRA_AXI_ID_WIDTH-1:0*/] S_AXI_CALIPTRA_AWID,
+    input  wire S_AXI_CALIPTRA_AWLOCK,
+    input  wire S_AXI_CALIPTRA_AWVALID,
+    output wire S_AXI_CALIPTRA_AWREADY,
+    // W
+    input  wire [31:0/*`CALIPTRA_AXI_DATA_WIDTH-1:0*/] S_AXI_CALIPTRA_WDATA,
+    input  wire [3:0/*`CALIPTRA_AXI_DATA_WIDTH/8:0*/] S_AXI_CALIPTRA_WSTRB,
+    input  wire S_AXI_CALIPTRA_WVALID,
+    output wire S_AXI_CALIPTRA_WREADY,
+    input  wire S_AXI_CALIPTRA_WLAST,
+    // B
+    output wire [1:0] S_AXI_CALIPTRA_BRESP,
+    output wire [4:0/*`CALIPTRA_AXI_ID_WIDTH-1:0*/] S_AXI_CALIPTRA_BID,
+    output wire S_AXI_CALIPTRA_BVALID,
+    input  wire S_AXI_CALIPTRA_BREADY,
+    // AR
+    input  wire [31:0/*`CALIPTRA_SLAVE_ADDR_WIDTH(`CALIPTRA_SLAVE_SEL_SOC_IFC)-1:0*/] S_AXI_CALIPTRA_ARADDR,
+    input  wire [1:0] S_AXI_CALIPTRA_ARBURST,
+    input  wire [2:0] S_AXI_CALIPTRA_ARSIZE,
+    input  wire [7:0] S_AXI_CALIPTRA_ARLEN,
+    input  wire [31:0/*`CALIPTRA_AXI_USER_WIDTH-1:0*/] S_AXI_CALIPTRA_ARUSER,
+    input  wire [4:0/*`CALIPTRA_AXI_ID_WIDTH-1:0*/] S_AXI_CALIPTRA_ARID,
+    input  wire S_AXI_CALIPTRA_ARLOCK,
+    input  wire S_AXI_CALIPTRA_ARVALID,
+    output wire S_AXI_CALIPTRA_ARREADY,
+    // R
+    output wire [31:0/*`CALIPTRA_AXI_DATA_WIDTH-1:0*/] S_AXI_CALIPTRA_RDATA,
+    output wire [3:0/*`CALIPTRA_AXI_DATA_WIDTH/8:0*/] S_AXI_CALIPTRA_RRESP,
+    output wire [4:0] S_AXI_CALIPTRA_RID,
+    output wire S_AXI_CALIPTRA_RLAST,
+    output wire S_AXI_CALIPTRA_RVALID,
+    input  wire S_AXI_CALIPTRA_RREADY,
 
     // ROM AXI Interface
     input  logic axi_bram_clk,
@@ -88,6 +127,53 @@ module caliptra_wrapper_top (
     logic [`CALIPTRA_IMEM_ADDR_WIDTH-1:0] imem_addr;
     logic [`CALIPTRA_IMEM_DATA_WIDTH-1:0] imem_rdata;
 
+    axi_if #(
+        .AW(`CALIPTRA_SLAVE_ADDR_WIDTH(`CALIPTRA_SLAVE_SEL_SOC_IFC)),
+        .DW(`CALIPTRA_AXI_DATA_WIDTH),
+        .IW(`CALIPTRA_AXI_ID_WIDTH),
+        .UW(`CALIPTRA_AXI_USER_WIDTH)
+    ) s_axi (.clk(core_clk), .rst_n(hwif_out.interface_regs.control.cptra_rst_b.value));
+
+    // AW
+    assign s_axi.w_sub.awaddr   = S_AXI_CALIPTRA_AWADDR;
+    assign s_axi.w_sub.awburst  = S_AXI_CALIPTRA_AWBURST;
+    assign s_axi.w_sub.awsize   = S_AXI_CALIPTRA_AWSIZE;
+    assign s_axi.w_sub.awlen    = S_AXI_CALIPTRA_AWLEN;
+    assign s_axi.w_sub.awuser   = S_AXI_CALIPTRA_AWUSER;
+    assign s_axi.w_sub.awid     = S_AXI_CALIPTRA_AWID;
+    assign s_axi.w_sub.awlock   = S_AXI_CALIPTRA_AWLOCK;
+    assign s_axi.w_sub.awvalid  = S_AXI_CALIPTRA_AWVALID;
+    assign S_AXI_CALIPTRA_AWREADY = s_axi.w_sub.awready;
+    // W
+    assign s_axi.w_sub.wdata    = S_AXI_CALIPTRA_WDATA;
+    assign s_axi.w_sub.wstrb    = S_AXI_CALIPTRA_WSTRB;
+    assign s_axi.w_sub.wvalid   = S_AXI_CALIPTRA_WVALID;
+    assign S_AXI_CALIPTRA_WREADY = s_axi.w_sub.wready;
+    assign s_axi.w_sub.wlast    = S_AXI_CALIPTRA_WLAST;
+    // B
+    assign S_AXI_CALIPTRA_BRESP  = s_axi.w_sub.bresp;
+    assign S_AXI_CALIPTRA_BID    = s_axi.w_sub.bid;
+    assign S_AXI_CALIPTRA_BVALID = s_axi.w_sub.bvalid;
+    assign s_axi.w_sub.bready  = S_AXI_CALIPTRA_BREADY;
+    // AR
+    assign s_axi.r_sub.araddr  = S_AXI_CALIPTRA_ARADDR;
+    assign s_axi.r_sub.arburst = S_AXI_CALIPTRA_ARBURST;
+    assign s_axi.r_sub.arsize  = S_AXI_CALIPTRA_ARSIZE;
+    assign s_axi.r_sub.arlen   = S_AXI_CALIPTRA_ARLEN;
+    assign s_axi.r_sub.aruser  = S_AXI_CALIPTRA_ARUSER;
+    assign s_axi.r_sub.arid    = S_AXI_CALIPTRA_ARID;
+    assign s_axi.r_sub.arlock  = S_AXI_CALIPTRA_ARLOCK;
+    assign s_axi.r_sub.arvalid = S_AXI_CALIPTRA_ARVALID;
+    assign S_AXI_CALIPTRA_ARREADY = s_axi.r_sub.arready;
+    // R
+    assign S_AXI_CALIPTRA_RDATA  = s_axi.r_sub.rdata;
+    assign S_AXI_CALIPTRA_RRESP  = s_axi.r_sub.rresp;
+    assign S_AXI_CALIPTRA_RID    = s_axi.r_sub.rid;
+    assign S_AXI_CALIPTRA_RLAST  = s_axi.r_sub.rlast;
+    assign S_AXI_CALIPTRA_RVALID = s_axi.r_sub.rvalid;
+    assign s_axi.r_sub.rready = S_AXI_CALIPTRA_RREADY;
+
+
     el2_mem_if el2_mem_export ();
 
     initial begin
@@ -122,16 +208,26 @@ caliptra_top caliptra_top_dut (
     .jtag_trst_n(jtag_trst_n),
     .jtag_tdo(jtag_tdo),
 
-    .PADDR(PADDR),
-    .PPROT(PPROT), // TODO: PPROT not provided?
-    .PAUSER(hwif_out.interface_regs.pauser.pauser.value),
-    .PENABLE(PENABLE),
-    .PRDATA(PRDATA),
-    .PREADY(PREADY),
-    .PSEL(PSEL),
-    .PSLVERR(PSLVERR),
-    .PWDATA(PWDATA),
-    .PWRITE(PWRITE),
+    // SoC APB Interface
+    //.PADDR(PADDR),
+    //.PPROT(PPROT), // TODO: PPROT not provided?
+    //.PAUSER(hwif_out.interface_regs.pauser.pauser.value),
+    //.PENABLE(PENABLE),
+    //.PRDATA(PRDATA),
+    //.PREADY(PREADY),
+    //.PSEL(PSEL),
+    //.PSLVERR(PSLVERR),
+    //.PWDATA(PWDATA),
+    //.PWRITE(PWRITE),
+
+    //SoC AXI Interface
+    .s_axi_w_if(s_axi.w_sub),
+    .s_axi_r_if(s_axi.r_sub),
+
+    // AXI Manager INF
+    // TODO: How to use this?
+    //m_axi_w_if(axi_if.w_mgr),
+    //m_axi_r_if(axi_if.r_mgr),
 
     .qspi_clk_o (),
     .qspi_cs_no (),
@@ -157,6 +253,10 @@ caliptra_top caliptra_top_dut (
 
     .mailbox_data_avail(hwif_in.interface_regs.status.mailbox_data_avail.next),
     .mailbox_flow_done(hwif_in.interface_regs.status.mailbox_flow_done.next),
+
+    // TODO: New addition
+    .recovery_data_avail(0),
+
     .BootFSM_BrkPoint(BootFSM_BrkPoint),
 
     //SoC Interrupts

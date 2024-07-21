@@ -174,6 +174,7 @@ ipx::edit_ip_in_project -upgrade true -name tmp_edit_project -directory $package
 ipx::infer_bus_interfaces xilinx.com:interface:apb_rtl:1.0 [ipx::current_core]
 ipx::infer_bus_interfaces xilinx.com:interface:bram_rtl:1.0 [ipx::current_core]
 ipx::associate_bus_interfaces -busif S_AXI -clock core_clk [ipx::current_core]
+ipx::associate_bus_interfaces -busif S_AXI_CALIPTRA -clock core_clk [ipx::current_core]
 set_property core_revision 1 [ipx::current_core]
 ipx::update_source_project_archive -component [ipx::current_core]
 ipx::create_xgui_files [ipx::current_core]
@@ -214,12 +215,13 @@ set_property -dict [list \
 create_bd_cell -type ip -vlnv xilinx.com:ip:axi_interconnect:2.1 axi_interconnect_0
 set_property CONFIG.NUM_MI {3} [get_bd_cells axi_interconnect_0]
 
-# Add AXI APB Bridge for Caliptra
-create_bd_cell -type ip -vlnv xilinx.com:ip:axi_apb_bridge:3.0 axi_apb_bridge_0
-set_property -dict [list \
-  CONFIG.C_APB_NUM_SLAVES {1} \
-  CONFIG.C_M_APB_PROTOCOL {apb4} \
-] [get_bd_cells axi_apb_bridge_0]
+# TODO: Make this conditional
+## Add AXI APB Bridge for Caliptra
+#create_bd_cell -type ip -vlnv xilinx.com:ip:axi_apb_bridge:3.0 axi_apb_bridge_0
+#set_property -dict [list \
+#  CONFIG.C_APB_NUM_SLAVES {1} \
+#  CONFIG.C_M_APB_PROTOCOL {apb4} \
+#] [get_bd_cells axi_apb_bridge_0]
 
 # Add AXI BRAM Controller for backdoor access to IMEM
 create_bd_cell -type ip -vlnv xilinx.com:ip:axi_bram_ctrl:4.1 axi_bram_ctrl_0
@@ -232,13 +234,19 @@ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_0
 set_property location {1 177 345} [get_bd_cells zynq_ultra_ps_e_0]
 set_property location {2 696 373} [get_bd_cells axi_interconnect_0]
 set_property location {2 707 654} [get_bd_cells proc_sys_reset_0]
-set_property location {3 1041 439} [get_bd_cells axi_apb_bridge_0]
+#set_property location {3 1041 439} [get_bd_cells axi_apb_bridge_0]
 set_property location {3 1151 617} [get_bd_cells axi_bram_ctrl_0]
 set_property location {4 1335 456} [get_bd_cells caliptra_package_top_0]
 
+# Possibly displaced apb bridge connections
+#connect_bd_net -net proc_sys_reset_0_peripheral_aresetn [get_bd_pins axi_apb_bridge_0/s_axi_aresetn]
+#connect_bd_net -net zynq_ultra_ps_e_0_pl_clk0 [get_bd_pins axi_apb_bridge_0/s_axi_aclk]
+
 # Create interface connections
-connect_bd_intf_net -intf_net axi_apb_bridge_0_APB_M [get_bd_intf_pins axi_apb_bridge_0/APB_M] [get_bd_intf_pins caliptra_package_top_0/s_apb]
-connect_bd_intf_net -intf_net axi_interconnect_0_M01_AXI [get_bd_intf_pins axi_apb_bridge_0/AXI4_LITE] [get_bd_intf_pins axi_interconnect_0/M01_AXI]
+#connect_bd_intf_net -intf_net axi_apb_bridge_0_APB_M [get_bd_intf_pins axi_apb_bridge_0/APB_M] [get_bd_intf_pins caliptra_package_top_0/s_apb]
+#connect_bd_intf_net -intf_net axi_interconnect_0_M01_AXI [get_bd_intf_pins axi_apb_bridge_0/AXI4_LITE] [get_bd_intf_pins axi_interconnect_0/M01_AXI]
+connect_bd_intf_net -boundary_type upper [get_bd_intf_pins axi_interconnect_0/M01_AXI] [get_bd_intf_pins caliptra_package_top_0/S_AXI_CALIPTRA]
+
 connect_bd_intf_net -intf_net zynq_ultra_ps_e_0_M_AXI_HPM0_LPD [get_bd_intf_pins axi_interconnect_0/S00_AXI] [get_bd_intf_pins zynq_ultra_ps_e_0/M_AXI_HPM0_LPD]
 connect_bd_intf_net [get_bd_intf_pins axi_bram_ctrl_0/S_AXI] -boundary_type upper [get_bd_intf_pins axi_interconnect_0/M02_AXI]
 connect_bd_intf_net [get_bd_intf_pins caliptra_package_top_0/axi_bram] [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTA]
@@ -258,7 +266,8 @@ connect_bd_net [get_bd_pins axi_interconnect_0/M02_ARESETN] [get_bd_pins proc_sy
 # Create address segments
 assign_bd_address -offset 0x80000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI/reg0] -force
 assign_bd_address -offset 0x82000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
-assign_bd_address -offset 0x90000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
+#assign_bd_address -offset 0x90000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
+assign_bd_address -offset 0x90000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI_CALIPTRA/reg0] -force
 
 if {$JTAG} {
   # Connect JTAG signals to PS GPIO pins
