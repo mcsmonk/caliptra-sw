@@ -180,7 +180,7 @@ if {$BOARD eq "ZCU104"} {
   close $xdc_fd
 
 } else {
-  create_bd_cell -type ip -vlnv xilinx.com:ip:versal_cips:3.3 ps_0
+  create_bd_cell -type ip -vlnv xilinx.com:ip:versal_cips ps_0
   set_property -dict [list \
     CONFIG.CPM_CONFIG { \
       CPM_PCIE0_MODES {None} \
