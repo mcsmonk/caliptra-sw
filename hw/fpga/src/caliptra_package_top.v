@@ -27,6 +27,19 @@
 module caliptra_package_top (
     input wire core_clk,
 
+`ifdef CALIPTRA_APB
+    // Caliptra APB Interface
+    input  wire [39:0]                s_apb_paddr,
+    input  wire                       s_apb_penable,
+    input  wire [2:0]                 s_apb_pprot,
+    output wire [`CALIPTRA_APB_DATA_WIDTH-1:0] s_apb_prdata,
+    output wire                       s_apb_pready,
+    input  wire                       s_apb_psel,
+    output wire                       s_apb_pslverr,
+    input  wire [3:0]                 s_apb_pstrb, // Leave unconnected
+    input  wire [`CALIPTRA_APB_DATA_WIDTH-1:0] s_apb_pwdata,
+    input  wire                       s_apb_pwrite,
+`else
     // Caliptra AXI Interface
     input  wire [31:0] S_AXI_CALIPTRA_AWADDR,
     input  wire [1:0] S_AXI_CALIPTRA_AWBURST,
@@ -65,6 +78,7 @@ module caliptra_package_top (
     output wire S_AXI_CALIPTRA_RLAST,
     output wire S_AXI_CALIPTRA_RVALID,
     input  wire S_AXI_CALIPTRA_RREADY,
+`endif
 
     // ROM AXI Interface
     input  wire                       axi_bram_clk,
@@ -105,6 +119,17 @@ module caliptra_package_top (
 caliptra_wrapper_top cptra_wrapper (
     .core_clk(core_clk),
 
+`ifdef CALIPTRA_APB
+    .PADDR(s_apb_paddr[`CALIPTRA_APB_ADDR_WIDTH-1:0]),
+    .PPROT(s_apb_pprot),
+    .PENABLE(s_apb_penable),
+    .PRDATA(s_apb_prdata),
+    .PREADY(s_apb_pready),
+    .PSEL(s_apb_psel),
+    .PSLVERR(s_apb_pslverr),
+    .PWDATA(s_apb_pwdata),
+    .PWRITE(s_apb_pwrite)
+`else
     // Caliptra AXI Interface
     .S_AXI_CALIPTRA_AWADDR(S_AXI_CALIPTRA_AWADDR),
     .S_AXI_CALIPTRA_AWBURST(S_AXI_CALIPTRA_AWBURST),
@@ -139,6 +164,7 @@ caliptra_wrapper_top cptra_wrapper (
     .S_AXI_CALIPTRA_RLAST(S_AXI_CALIPTRA_RLAST),
     .S_AXI_CALIPTRA_RVALID(S_AXI_CALIPTRA_RVALID),
     .S_AXI_CALIPTRA_RREADY(S_AXI_CALIPTRA_RREADY),
+`endif
 
     // SOC access to program ROM
     .axi_bram_clk(axi_bram_clk),

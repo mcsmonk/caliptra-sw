@@ -24,6 +24,18 @@ import caliptra_fpga_realtime_regs_pkg::*;
 module caliptra_wrapper_top (
     input bit core_clk,
 
+`ifdef CALIPTRA_APB
+    // Caliptra APB Interface
+    input  wire [`CALIPTRA_APB_ADDR_WIDTH-1:0] PADDR,
+    input  wire                       PENABLE,
+    input  wire [2:0]                 PPROT,
+    output wire [`CALIPTRA_APB_DATA_WIDTH-1:0] PRDATA,
+    output wire                       PREADY,
+    input  wire                       PSEL,
+    output wire                       PSLVERR,
+    input  wire [`CALIPTRA_APB_DATA_WIDTH-1:0] PWDATA,
+    input  wire                       PWRITE,
+`else
     // Caliptra AXI Interface
     input  wire [31:0] S_AXI_CALIPTRA_AWADDR,
     input  wire [1:0] S_AXI_CALIPTRA_AWBURST,
@@ -62,6 +74,7 @@ module caliptra_wrapper_top (
     output wire S_AXI_CALIPTRA_RLAST,
     output wire S_AXI_CALIPTRA_RVALID,
     input  wire S_AXI_CALIPTRA_RREADY,
+`endif
 
     // ROM AXI Interface
     input  logic axi_bram_clk,
@@ -116,204 +129,6 @@ module caliptra_wrapper_top (
     logic [`CALIPTRA_IMEM_ADDR_WIDTH-1:0] imem_addr;
     logic [`CALIPTRA_IMEM_DATA_WIDTH-1:0] imem_rdata;
 
-`ifdef CALIPTRA_APB
-    logic [31:0] M_AXIL_BRIDGE_AWADDR
-    logic [2:0]  M_AXIL_BRIDGE_AWPROT
-    logic        M_AXIL_BRIDGE_AWVALID
-    logic        M_AXIL_BRIDGE_AWREADY
-    logic [31:0] M_AXIL_BRIDGE_WDATA
-    logic [3:0] M_AXIL_BRIDGE_WSTRB
-    logic        M_AXIL_BRIDGE_WVALID
-    logic        M_AXIL_BRIDGE_WREADY
-    logic [1:0]  M_AXIL_BRIDGE_BRESP
-    logic        M_AXIL_BRIDGE_BVALID
-    logic        M_AXIL_BRIDGE_BREADY
-    logic [31:0] M_AXIL_BRIDGE_ARADDR
-    logic [2:0]  M_AXIL_BRIDGE_ARPROT
-    logic        M_AXIL_BRIDGE_ARVALID
-    logic        M_AXIL_BRIDGE_ARREADY
-    logic [31:0] M_AXIL_BRIDGE_RDATA
-    logic [1:0]  M_AXIL_BRIDGE_RRESP
-    logic        M_AXIL_BRIDGE_RVALID
-    logic        M_AXIL_BRIDGE_RREADY
-
-    axi_protocol_converter_0 your_instance_name (
-        .aclk(core_clk),                           // input wire aclk
-        .aresetn(hwif_out.interface_regs.control.cptra_rst_b.value), // input wire aresetn
-        .s_axi_awid(S_AXI_CALIPTRA_AWID),          // input wire [15 : 0] s_axi_awid
-        .s_axi_awaddr(S_AXI_CALIPTRA_AWADDR),      // input wire [31 : 0] s_axi_awaddr
-        .s_axi_awlen(S_AXI_CALIPTRA_AWLEN),        // input wire [7 : 0] s_axi_awlen
-        .s_axi_awsize(S_AXI_CALIPTRA_AWSIZE),      // input wire [2 : 0] s_axi_awsize
-        .s_axi_awburst(S_AXI_CALIPTRA_AWBURST),    // input wire [1 : 0] s_axi_awburst
-        .s_axi_awlock(S_AXI_CALIPTRA_AWLOCK),      // input wire [0 : 0] s_axi_awlock
-        .s_axi_awcache(0),                         // input wire [3 : 0] s_axi_awcache
-        .s_axi_awprot(0),                          // input wire [2 : 0] s_axi_awprot
-        .s_axi_awregion(0),                        // input wire [3 : 0] s_axi_awregion
-        .s_axi_awqos(0),                           // input wire [3 : 0] s_axi_awqos
-        .s_axi_awvalid(S_AXI_CALIPTRA_AWVALID),    // input wire s_axi_awvalid
-        .s_axi_awready(S_AXI_CALIPTRA_AWREADY),    // output wire s_axi_awready
-        .s_axi_wdata(S_AXI_CALIPTRA_WDATA),        // input wire [31 : 0] s_axi_wdata
-        .s_axi_wstrb(S_AXI_CALIPTRA_WSTRB),        // input wire [3 : 0] s_axi_wstrb
-        .s_axi_wlast(S_AXI_CALIPTRA_WLAST),        // input wire s_axi_wlast
-        .s_axi_wvalid(S_AXI_CALIPTRA_WVALID),      // input wire s_axi_wvalid
-        .s_axi_wready(S_AXI_CALIPTRA_WREADY),      // output wire s_axi_wready
-        .s_axi_bid(S_AXI_CALIPTRA_BID),            // output wire [15 : 0] s_axi_bid
-        .s_axi_bresp(S_AXI_CALIPTRA_BRESP),        // output wire [1 : 0] s_axi_bresp
-        .s_axi_bvalid(S_AXI_CALIPTRA_BVALID),      // output wire s_axi_bvalid
-        .s_axi_bready(S_AXI_CALIPTRA_BREADY),      // input wire s_axi_bready
-        .s_axi_arid(S_AXI_CALIPTRA_ARID),          // input wire [15 : 0] s_axi_arid
-        .s_axi_araddr(S_AXI_CALIPTRA_ARADDR),      // input wire [31 : 0] s_axi_araddr
-        .s_axi_arlen(S_AXI_CALIPTRA_ARLEN),        // input wire [7 : 0] s_axi_arlen
-        .s_axi_arsize(S_AXI_CALIPTRA_ARSIZE),      // input wire [2 : 0] s_axi_arsize
-        .s_axi_arburst(S_AXI_CALIPTRA_ARBURST),    // input wire [1 : 0] s_axi_arburst
-        .s_axi_arlock(S_AXI_CALIPTRA_ARLOCK),      // input wire [0 : 0] s_axi_arlock
-        .s_axi_arcache(0),                         // input wire [3 : 0] s_axi_arcache
-        .s_axi_arprot(0),                          // input wire [2 : 0] s_axi_arprot
-        .s_axi_arregion(0),                        // input wire [3 : 0] s_axi_arregion
-        .s_axi_arqos(0),                           // input wire [3 : 0] s_axi_arqos
-        .s_axi_arvalid(S_AXI_CALIPTRA_ARVALID),    // input wire s_axi_arvalid
-        .s_axi_arready(S_AXI_CALIPTRA_ARREADY),    // output wire s_axi_arready
-        .s_axi_rid(S_AXI_CALIPTRA_RID),            // output wire [15 : 0] s_axi_rid
-        .s_axi_rdata(S_AXI_CALIPTRA_RDATA),        // output wire [31 : 0] s_axi_rdata
-        .s_axi_rresp(S_AXI_CALIPTRA_RRESP),        // output wire [1 : 0] s_axi_rresp
-        .s_axi_rlast(S_AXI_CALIPTRA_RLAST),        // output wire s_axi_rlast
-        .s_axi_rvalid(S_AXI_CALIPTRA_RVALID),      // output wire s_axi_rvalid
-        .s_axi_rready(S_AXI_CALIPTRA_RREADY),      // input wire s_axi_rready
-
-        .m_axi_awaddr(M_AXIL_BRIDGE_AWADDR),      // output wire [31 : 0] m_axi_awaddr
-        .m_axi_awprot(M_AXIL_BRIDGE_AWPROT),      // output wire [2 : 0] m_axi_awprot
-        .m_axi_awvalid(M_AXIL_BRIDGE_AWVALID),    // output wire m_axi_awvalid
-        .m_axi_awready(M_AXIL_BRIDGE_AWREADY),    // input wire m_axi_awready
-        .m_axi_wdata(M_AXIL_BRIDGE_WDATA),        // output wire [31 : 0] m_axi_wdata
-        .m_axi_wstrb(M_AXIL_BRIDGE_WSTRB),        // output wire [3 : 0] m_axi_wstrb
-        .m_axi_wvalid(M_AXIL_BRIDGE_WVALID),      // output wire m_axi_wvalid
-        .m_axi_wready(M_AXIL_BRIDGE_WREADY),      // input wire m_axi_wready
-        .m_axi_bresp(M_AXIL_BRIDGE_BRESP),        // input wire [1 : 0] m_axi_bresp
-        .m_axi_bvalid(M_AXIL_BRIDGE_BVALID),      // input wire m_axi_bvalid
-        .m_axi_bready(M_AXIL_BRIDGE_BREADY),      // output wire m_axi_bready
-        .m_axi_araddr(M_AXIL_BRIDGE_ARADDR),      // output wire [31 : 0] m_axi_araddr
-        .m_axi_arprot(M_AXIL_BRIDGE_ARPROT),      // output wire [2 : 0] m_axi_arprot
-        .m_axi_arvalid(M_AXIL_BRIDGE_ARVALID),    // output wire m_axi_arvalid
-        .m_axi_arready(M_AXIL_BRIDGE_ARREADY),    // input wire m_axi_arready
-        .m_axi_rdata(M_AXIL_BRIDGE_RDATA),        // input wire [31 : 0] m_axi_rdata
-        .m_axi_rresp(M_AXIL_BRIDGE_RRESP),        // input wire [1 : 0] m_axi_rresp
-        .m_axi_rvalid(M_AXIL_BRIDGE_RVALID),      // input wire m_axi_rvalid
-        .m_axi_rready(M_AXIL_BRIDGE_RREADY)       // output wire m_axi_rready
-    );
-    
-    // Caliptra APB Interface
-    logic [`CALIPTRA_APB_ADDR_WIDTH-1:0] PADDR;
-    logic                                PENABLE;
-    logic [`CALIPTRA_APB_DATA_WIDTH-1:0] PRDATA;
-    logic                                PREADY;
-    logic                                PSEL;
-    logic                                PSLVERR;
-    logic [`CALIPTRA_APB_DATA_WIDTH-1:0] PWDATA;
-    logic                                PWRITE;
-
-    axi_apb_bridge_0 apb_bridge (
-        .s_axi_aclk(core_clk),        // input wire s_axi_aclk
-        .s_axi_aresetn(hwif_out.interface_regs.control.cptra_rst_b.value),  // input wire s_axi_aresetn
-        .s_axi_awaddr(M_AXIL_BRIDGE_AWADDR),    // input wire [31 : 0] s_axi_awaddr
-        .s_axi_awprot(M_AXIL_BRIDGE_AWPROT),    // input wire [2 : 0] s_axi_awprot
-        .s_axi_awvalid(M_AXIL_BRIDGE_AWVALID),  // input wire s_axi_awvalid
-        .s_axi_awready(M_AXIL_BRIDGE_AWREADY),  // output wire s_axi_awready
-        .s_axi_wdata(M_AXIL_BRIDGE_WDATA),      // input wire [31 : 0] s_axi_wdata
-        .s_axi_wstrb(M_AXIL_BRIDGE_WSTRB),      // input wire [3 : 0] s_axi_wstrb
-        .s_axi_wvalid(M_AXIL_BRIDGE_WVALID),    // input wire s_axi_wvalid
-        .s_axi_wready(M_AXIL_BRIDGE_WREADY),    // output wire s_axi_wready
-        .s_axi_bresp(M_AXIL_BRIDGE_BRESP),      // output wire [1 : 0] s_axi_bresp
-        .s_axi_bvalid(M_AXIL_BRIDGE_BVALID),    // output wire s_axi_bvalid
-        .s_axi_bready(M_AXIL_BRIDGE_BREADY),    // input wire s_axi_bready
-        .s_axi_araddr(M_AXIL_BRIDGE_ARADDR),    // input wire [31 : 0] s_axi_araddr
-        .s_axi_arprot(M_AXIL_BRIDGE_ARPROT),    // input wire [2 : 0] s_axi_arprot
-        .s_axi_arvalid(M_AXIL_BRIDGE_ARVALID),  // input wire s_axi_arvalid
-        .s_axi_arready(M_AXIL_BRIDGE_ARREADY),  // output wire s_axi_arready
-        .s_axi_rdata(M_AXIL_BRIDGE_RDATA),      // output wire [31 : 0] s_axi_rdata
-        .s_axi_rresp(M_AXIL_BRIDGE_RRESP),      // output wire [1 : 0] s_axi_rresp
-        .s_axi_rvalid(M_AXIL_BRIDGE_RVALID),    // output wire s_axi_rvalid
-        .s_axi_rready(M_AXIL_BRIDGE_RREADY),    // input wire s_axi_rready
-
-        .m_apb_paddr(PADDR),      // output wire [31 : 0] m_apb_paddr
-        .m_apb_psel(PSEL),        // output wire [0 : 0] m_apb_psel
-        .m_apb_penable(PENABLE),  // output wire m_apb_penable
-        .m_apb_pwrite(PWRITE),    // output wire m_apb_pwrite
-        .m_apb_pwdata(PWDATA),    // output wire [31 : 0] m_apb_pwdata
-        .m_apb_pready(PREADY),    // input wire [0 : 0] m_apb_pready
-        .m_apb_prdata(PRDATA),    // input wire [31 : 0] m_apb_prdata
-        .m_apb_pslverr(PSLVERR),  // input wire [0 : 0] m_apb_pslverr
-    );
-
-`else
-    axi_if #(
-        .AW(`CALIPTRA_SLAVE_ADDR_WIDTH(`CALIPTRA_SLAVE_SEL_SOC_IFC)),
-        .DW(`CALIPTRA_AXI_DATA_WIDTH),
-        .IW(`CALIPTRA_AXI_ID_WIDTH),
-        .UW(`CALIPTRA_AXI_USER_WIDTH)
-    ) s_axi (.clk(core_clk), .rst_n(hwif_out.interface_regs.control.cptra_rst_b.value));
-
-    // AW
-    assign s_axi.awaddr   = S_AXI_CALIPTRA_AWADDR;
-    assign s_axi.awburst  = S_AXI_CALIPTRA_AWBURST;
-    assign s_axi.awsize   = S_AXI_CALIPTRA_AWSIZE;
-    assign s_axi.awlen    = S_AXI_CALIPTRA_AWLEN;
-    assign s_axi.awuser   = S_AXI_CALIPTRA_AWUSER;
-    assign s_axi.awid     = hwif_out.interface_regs.pauser.pauser.value;
-    assign s_axi.awlock   = S_AXI_CALIPTRA_AWLOCK;
-    assign s_axi.awvalid  = S_AXI_CALIPTRA_AWVALID;
-    assign S_AXI_CALIPTRA_AWREADY = s_axi.awready;
-    // W
-    assign s_axi.wdata    = S_AXI_CALIPTRA_WDATA;
-    assign s_axi.wstrb    = S_AXI_CALIPTRA_WSTRB;
-    assign s_axi.wvalid   = S_AXI_CALIPTRA_WVALID;
-    assign S_AXI_CALIPTRA_WREADY = s_axi.wready;
-    assign s_axi.wlast    = S_AXI_CALIPTRA_WLAST;
-    // B
-    assign S_AXI_CALIPTRA_BRESP  = s_axi.bresp;
-    //assign S_AXI_CALIPTRA_BID    = s_axi.bid;
-    assign S_AXI_CALIPTRA_BVALID = s_axi.bvalid;
-    assign s_axi.bready  = S_AXI_CALIPTRA_BREADY;
-    // AR
-    assign s_axi.araddr  = S_AXI_CALIPTRA_ARADDR;
-    assign s_axi.arburst = S_AXI_CALIPTRA_ARBURST;
-    assign s_axi.arsize  = S_AXI_CALIPTRA_ARSIZE;
-    assign s_axi.arlen   = S_AXI_CALIPTRA_ARLEN;
-    assign s_axi.aruser  = S_AXI_CALIPTRA_ARUSER;
-    assign s_axi.arid    = hwif_out.interface_regs.pauser.pauser.value;
-    assign s_axi.arlock  = S_AXI_CALIPTRA_ARLOCK;
-    assign s_axi.arvalid = S_AXI_CALIPTRA_ARVALID;
-    assign S_AXI_CALIPTRA_ARREADY = s_axi.arready;
-    // R
-    assign S_AXI_CALIPTRA_RDATA  = s_axi.rdata;
-    assign S_AXI_CALIPTRA_RRESP  = s_axi.rresp;
-    //assign S_AXI_CALIPTRA_RID    = s_axi.rid;
-    assign S_AXI_CALIPTRA_RLAST  = s_axi.rlast;
-    assign S_AXI_CALIPTRA_RVALID = s_axi.rvalid;
-    assign s_axi.rready = S_AXI_CALIPTRA_RREADY;
-
-    // TODO: FPGA AXI manager changes ID values from transaction to transaction. Caliptra
-    // does not expect that. Replace the input ID values with the PAUSER register and
-    // return the RID values that the manager expects.
-    always@(posedge core_clk or negedge hwif_out.interface_regs.control.cptra_rst_b.value) begin
-        if (~hwif_out.interface_regs.control.cptra_rst_b.value) begin
-            S_AXI_CALIPTRA_RID <= 0;
-            S_AXI_CALIPTRA_BID <= 0;
-        end
-        else begin
-            S_AXI_CALIPTRA_RID <= S_AXI_CALIPTRA_ARID;
-            S_AXI_CALIPTRA_BID <= S_AXI_CALIPTRA_AWID;
-        end
-    end
-
-    // Unused master interface
-    axi_if #(
-        .AW(`CALIPTRA_SLAVE_ADDR_WIDTH(`CALIPTRA_SLAVE_SEL_SOC_IFC)),
-        .DW(`CALIPTRA_AXI_DATA_WIDTH),
-        .IW(`CALIPTRA_AXI_ID_WIDTH),
-        .UW(`CALIPTRA_AXI_USER_WIDTH)
-    ) m_axi (.clk(core_clk), .rst_n(hwif_out.interface_regs.control.cptra_rst_b.value));
-`endif
-
     el2_mem_if el2_mem_export ();
 
     initial begin
@@ -351,7 +166,7 @@ caliptra_top caliptra_top_dut (
 `ifdef CALIPTRA_APB
      SoC APB Interface
     .PADDR(PADDR),
-    //.PPROT(PPROT),
+    .PPROT(PPROT),
     .PAUSER(hwif_out.interface_regs.pauser.pauser.value),
     .PENABLE(PENABLE),
     .PRDATA(PRDATA),
