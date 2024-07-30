@@ -17,6 +17,7 @@ set JTAG  TRUE
 set ITRNG TRUE
 set CG_EN FALSE
 set RTL_VERSION latest
+set APB TRUE
 foreach arg $argv {
     regexp {(.*)=(.*)} $arg fullmatch option value
     set $option "$value"
@@ -49,6 +50,9 @@ if {$CG_EN} {
 if {$ITRNG} {
   # Add option to use Caliptra's internal TRNG instead of ETRNG
   lappend VERILOG_OPTIONS CALIPTRA_INTERNAL_TRNG
+}
+if {$APB} {
+  lappend VERILOG_OPTIONS CALIPTRA_APB
 }
 
 # Start the Vivado GUI for interactive debug
@@ -116,6 +120,19 @@ set_property -dict [list \
   CONFIG.asymmetric_port_width {true} \
 ] [get_ips itrng_fifo]
 
+if {$APB} {
+  # TODO: Better description: Adapt AXI to AXI for APB converter
+  create_ip -name axi_protocol_converter -vendor xilinx.com -library ip -version 2.1 -module_name axi_protocol_converter_0
+  set_property CONFIG.ID_WIDTH {16} [get_ips axi_protocol_converter_0]
+
+  # Create AXIlight to APB for Caliptra 1.x
+  create_ip -name axi_apb_bridge -vendor xilinx.com -library ip -version 3.0 -module_name axi_apb_bridge_0
+  set_property -dict [list \
+    CONFIG.C_APB_NUM_SLAVES {1} \
+    CONFIG.C_M_APB_PROTOCOL {apb3} \
+  ] [get_ips axi_apb_bridge_0]
+}
+
 set_property verilog_define $VERILOG_OPTIONS [current_fileset]
 
 # Add VEER Headers
@@ -173,8 +190,10 @@ ipx::unload_core $packageDir/component.xml
 ipx::edit_ip_in_project -upgrade true -name tmp_edit_project -directory $packageDir $packageDir/component.xml
 ipx::infer_bus_interfaces xilinx.com:interface:apb_rtl:1.0 [ipx::current_core]
 ipx::infer_bus_interfaces xilinx.com:interface:bram_rtl:1.0 [ipx::current_core]
+set_property value BRAM_CTRL [ipx::get_bus_parameters MASTER_TYPE -of_objects [ipx::get_bus_interfaces axi_bram -of_objects [ipx::current_core]]]
 ipx::associate_bus_interfaces -busif S_AXI -clock core_clk [ipx::current_core]
 ipx::associate_bus_interfaces -busif S_AXI_CALIPTRA -clock core_clk [ipx::current_core]
+ipx::associate_bus_interfaces -busif axi_bram -clock axi_bram_clk [ipx::current_core]
 set_property core_revision 1 [ipx::current_core]
 ipx::update_source_project_archive -component [ipx::current_core]
 ipx::create_xgui_files [ipx::current_core]
