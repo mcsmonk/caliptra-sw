@@ -69,6 +69,7 @@ if {$BOARD eq "ZCU104"} {
 # Create a project to package Caliptra.
 # Packaging Caliptra allows Vivado to recognize the APB bus as an endpoint for the memory map.
 create_project caliptra_package_project $outputDir -part $PART
+set_property board_part xilinx.com:vck190:part0:3.1 [current_project]
 
 set_property verilog_define $VERILOG_OPTIONS [current_fileset]
 
@@ -127,6 +128,7 @@ ipx::unload_core $packageDir/component.xml
 ipx::edit_ip_in_project -upgrade true -name tmp_edit_project -directory $packageDir $packageDir/component.xml
 ipx::infer_bus_interfaces xilinx.com:interface:apb_rtl:1.0 [ipx::current_core]
 ipx::infer_bus_interfaces xilinx.com:interface:bram_rtl:1.0 [ipx::current_core]
+ipx::add_bus_parameter MASTER_TYPE [ipx::get_bus_interfaces axi_bram -of_objects [ipx::current_core]]
 ipx::associate_bus_interfaces -busif S_AXI -clock core_clk [ipx::current_core]
 set_property core_revision 1 [ipx::current_core]
 ipx::update_source_project_archive -component [ipx::current_core]
@@ -180,37 +182,246 @@ if {$BOARD eq "ZCU104"} {
   close $xdc_fd
 
 } else {
+  # Create interface ports
+  set ddr4_dimm1 [ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:ddr4_rtl:1.0 ddr4_dimm1 ]
+
+  set ddr4_dimm1_sma_clk [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:diff_clock_rtl:1.0 ddr4_dimm1_sma_clk ]
+  set_property -dict [ list \
+   CONFIG.FREQ_HZ {200000000} \
+   ] $ddr4_dimm1_sma_clk
+
   create_bd_cell -type ip -vlnv xilinx.com:ip:versal_cips ps_0
   set_property -dict [list \
-    CONFIG.CPM_CONFIG { \
-      CPM_PCIE0_MODES {None} \
-    } \
+    CONFIG.CLOCK_MODE {Custom} \
+    CONFIG.DDR_MEMORY_MODE {Enable} \
+    CONFIG.DEBUG_MODE {JTAG} \
+    CONFIG.DESIGN_MODE {1} \
     CONFIG.PS_PL_CONNECTIVITY_MODE {Custom} \
     CONFIG.PS_PMC_CONFIG { \
+      CLOCK_MODE {Custom} \
+      DDR_MEMORY_MODE {Connectivity to DDR via NOC} \
+      DEBUG_MODE {JTAG} \
       DESIGN_MODE {1} \
       PMC_CRP_PL0_REF_CTRL_FREQMHZ {20} \
-      PS_BOARD_INTERFACE {Custom} \
-      PS_CRL_LPD_LSBUS_CTRL_FREQMHZ {20} \
-      PS_GPIO_EMIO_PERIPHERAL_ENABLE {1} \
-      PS_GPIO_EMIO_WIDTH {5} \
-      PS_M_AXI_LPD_DATA_WIDTH {32} \
+      PMC_GPIO0_MIO_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 0 .. 25}}} \
+      PMC_GPIO1_MIO_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 26 .. 51}}} \
+      PMC_MIO37 {{AUX_IO 0} {DIRECTION out} {DRIVE_STRENGTH 8mA} {OUTPUT_DATA high} {PULL pullup} {SCHMITT 0} {SLEW slow} {USAGE GPIO}} \
+      PMC_OSPI_PERIPHERAL {{ENABLE 0} {IO {PMC_MIO 0 .. 11}} {MODE Single}} \
+      PMC_QSPI_COHERENCY {0} \
+      PMC_QSPI_FBCLK {{ENABLE 1} {IO {PMC_MIO 6}}} \
+      PMC_QSPI_PERIPHERAL_DATA_MODE {x4} \
+      PMC_QSPI_PERIPHERAL_ENABLE {1} \
+      PMC_QSPI_PERIPHERAL_MODE {Dual Parallel} \
+      PMC_REF_CLK_FREQMHZ {33.3333} \
+      PMC_SD1 {{CD_ENABLE 1} {CD_IO {PMC_MIO 28}} {POW_ENABLE 1} {POW_IO {PMC_MIO 51}} {RESET_ENABLE 0} {RESET_IO {PMC_MIO 12}} {WP_ENABLE 0} {WP_IO {PMC_MIO 1}}} \
+      PMC_SD1_COHERENCY {0} \
+      PMC_SD1_DATA_TRANSFER_MODE {8Bit} \
+      PMC_SD1_PERIPHERAL {{CLK_100_SDR_OTAP_DLY 0x3} {CLK_200_SDR_OTAP_DLY 0x2} {CLK_50_DDR_ITAP_DLY 0x36} {CLK_50_DDR_OTAP_DLY 0x3} {CLK_50_SDR_ITAP_DLY 0x2C} {CLK_50_SDR_OTAP_DLY 0x4} {ENABLE 1} {IO\
+{PMC_MIO 26 .. 36}}} \
+      PMC_SD1_SLOT_TYPE {SD 3.0} \
+      PMC_USE_PMC_NOC_AXI0 {1} \
+      PS_CAN1_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 40 .. 41}}} \
+      PS_CRL_CAN1_REF_CTRL_FREQMHZ {160} \
+      PS_ENET0_MDIO {{ENABLE 1} {IO {PS_MIO 24 .. 25}}} \
+      PS_ENET0_PERIPHERAL {{ENABLE 1} {IO {PS_MIO 0 .. 11}}} \
+      PS_ENET1_PERIPHERAL {{ENABLE 1} {IO {PS_MIO 12 .. 23}}} \
+      PS_GEN_IPI0_ENABLE {1} \
+      PS_GEN_IPI0_MASTER {A72} \
+      PS_GEN_IPI1_ENABLE {1} \
+      PS_GEN_IPI2_ENABLE {1} \
+      PS_GEN_IPI3_ENABLE {1} \
+      PS_GEN_IPI4_ENABLE {1} \
+      PS_GEN_IPI5_ENABLE {1} \
+      PS_GEN_IPI6_ENABLE {1} \
+      PS_HSDP_EGRESS_TRAFFIC {JTAG} \
+      PS_HSDP_INGRESS_TRAFFIC {JTAG} \
+      PS_HSDP_MODE {NONE} \
+      PS_I2C0_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 46 .. 47}}} \
+      PS_I2C1_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 44 .. 45}}} \
+      PS_MIO19 {{AUX_IO 0} {DIRECTION in} {DRIVE_STRENGTH 8mA} {OUTPUT_DATA default} {PULL disable} {SCHMITT 0} {SLEW slow} {USAGE Reserved}} \
+      PS_MIO21 {{AUX_IO 0} {DIRECTION in} {DRIVE_STRENGTH 8mA} {OUTPUT_DATA default} {PULL disable} {SCHMITT 0} {SLEW slow} {USAGE Reserved}} \
+      PS_MIO7 {{AUX_IO 0} {DIRECTION in} {DRIVE_STRENGTH 8mA} {OUTPUT_DATA default} {PULL disable} {SCHMITT 0} {SLEW slow} {USAGE Reserved}} \
+      PS_MIO9 {{AUX_IO 0} {DIRECTION in} {DRIVE_STRENGTH 8mA} {OUTPUT_DATA default} {PULL disable} {SCHMITT 0} {SLEW slow} {USAGE Reserved}} \
       PS_NUM_FABRIC_RESETS {1} \
+      PS_PCIE_EP_RESET1_IO {PMC_MIO 38} \
+      PS_PCIE_EP_RESET2_IO {PMC_MIO 39} \
+      PS_PCIE_RESET {ENABLE 1} \
       PS_PL_CONNECTIVITY_MODE {Custom} \
-      PS_USE_M_AXI_LPD {1} \
+      PS_UART0_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 42 .. 43}}} \
+      PS_USB3_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 13 .. 25}}} \
+      PS_USE_FPD_AXI_NOC0 {1} \
+      PS_USE_FPD_AXI_NOC1 {1} \
+      PS_USE_FPD_CCI_NOC {1} \
+      PS_USE_FPD_CCI_NOC0 {1} \
+      PS_USE_M_AXI_FPD {1} \
+      PS_USE_NOC_LPD_AXI0 {1} \
       PS_USE_PMCPL_CLK0 {1} \
+      PS_USE_PMCPL_CLK1 {0} \
+      PS_USE_PMCPL_CLK2 {0} \
+      PS_USE_PMCPL_CLK3 {0} \
       SMON_ALARMS {Set_Alarms_On} \
       SMON_ENABLE_TEMP_AVERAGING {0} \
       SMON_TEMP_AVERAGING_SAMPLES {0} \
+      PS_GPIO_EMIO_WIDTH {5} \
+      PS_GPIO_EMIO_PERIPHERAL_ENABLE {1} \
     } \
   ] [get_bd_cells ps_0]
+  #  CONFIG.PS_BOARD_INTERFACE {ps_pmc_fixed_io} \
+  #  PS_BOARD_INTERFACE {ps_pmc_fixed_io} \
+  
+  # Create instance: axi_noc_0, and set properties
+  set axi_noc_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc axi_noc_0 ]
+  set_property -dict [ list \
+   CONFIG.CONTROLLERTYPE {DDR4_SDRAM} \
+   CONFIG.MC_CHAN_REGION1 {DDR_LOW1} \
+   CONFIG.MC_COMPONENT_WIDTH {x8} \
+   CONFIG.MC_DATAWIDTH {64} \
+   CONFIG.MC_INPUTCLK0_PERIOD {5000} \
+   CONFIG.MC_INTERLEAVE_SIZE {128} \
+   CONFIG.MC_MEMORY_DEVICETYPE {UDIMMs} \
+   CONFIG.MC_MEMORY_SPEEDGRADE {DDR4-3200AA(22-22-22)} \
+   CONFIG.MC_NO_CHANNELS {Single} \
+   CONFIG.MC_RANK {1} \
+   CONFIG.MC_ROWADDRESSWIDTH {16} \
+   CONFIG.MC_STACKHEIGHT {1} \
+   CONFIG.MC_SYSTEM_CLOCK {Differential} \
+   CONFIG.NUM_CLKS {8} \
+   CONFIG.NUM_MC {1} \
+   CONFIG.NUM_MCP {4} \
+   CONFIG.NUM_MI {0} \
+   CONFIG.NUM_SI {8} \
+ ] $axi_noc_0
+  #  CONFIG.CH0_DDR4_0_BOARD_INTERFACE {ddr4_dimm1} \
+  #  CONFIG.sys_clk0_BOARD_INTERFACE {ddr4_dimm1_sma_clk} \
+
+set_property -dict [list CONFIG.CATEGORY {ps_cci} CONFIG.CONNECTIONS {MC_0 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}}}] [get_bd_intf_pins /axi_noc_0/S00_AXI]
+set_property -dict [list CONFIG.CATEGORY {ps_cci} CONFIG.CONNECTIONS {MC_1 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}}}] [get_bd_intf_pins /axi_noc_0/S01_AXI]
+set_property -dict [list CONFIG.CATEGORY {ps_cci} CONFIG.CONNECTIONS {MC_2 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}}}] [get_bd_intf_pins /axi_noc_0/S02_AXI]
+set_property -dict [list CONFIG.CATEGORY {ps_cci} CONFIG.CONNECTIONS {MC_3 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}}}] [get_bd_intf_pins /axi_noc_0/S03_AXI]
+set_property -dict [list CONFIG.CATEGORY {ps_rpu} CONFIG.CONNECTIONS {MC_0 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}}}] [get_bd_intf_pins /axi_noc_0/S04_AXI]
+set_property -dict [list CONFIG.CATEGORY {ps_pmc} CONFIG.CONNECTIONS {MC_0 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}}}] [get_bd_intf_pins /axi_noc_0/S05_AXI]
+set_property -dict [list CONFIG.CATEGORY {ps_nci} CONFIG.CONNECTIONS {MC_1 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}}}] [get_bd_intf_pins /axi_noc_0/S06_AXI]
+set_property -dict [list CONFIG.CATEGORY {ps_nci} CONFIG.CONNECTIONS {MC_2 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}}}] [get_bd_intf_pins /axi_noc_0/S07_AXI]
+#set_property -dict [list CONFIG.ASSOCIATED_BUSIF {S03_AXI:S02_AXI:S00_AXI:S01_AXI:S04_AXI:S07_AXI:S06_AXI:S05_AXI}] [get_bd_pins /axi_noc_0/aclk0]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {128} \
+   CONFIG.REGION {0} \
+   CONFIG.CONNECTIONS {MC_0 {read_bw {100} write_bw {100} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.CATEGORY {ps_cci} \
+ ] [get_bd_intf_pins /axi_noc_0/S00_AXI]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {128} \
+   CONFIG.REGION {0} \
+   CONFIG.CONNECTIONS {MC_1 {read_bw {100} write_bw {100} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.CATEGORY {ps_cci} \
+ ] [get_bd_intf_pins /axi_noc_0/S01_AXI]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {128} \
+   CONFIG.REGION {0} \
+   CONFIG.CONNECTIONS {MC_2 {read_bw {100} write_bw {100} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.CATEGORY {ps_cci} \
+ ] [get_bd_intf_pins /axi_noc_0/S02_AXI]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {128} \
+   CONFIG.REGION {0} \
+   CONFIG.CONNECTIONS {MC_3 {read_bw {100} write_bw {100} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.CATEGORY {ps_cci} \
+ ] [get_bd_intf_pins /axi_noc_0/S03_AXI]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {128} \
+   CONFIG.REGION {0} \
+   CONFIG.CONNECTIONS {MC_0 {read_bw {100} write_bw {100} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.CATEGORY {ps_rpu} \
+ ] [get_bd_intf_pins /axi_noc_0/S04_AXI]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {128} \
+   CONFIG.REGION {0} \
+   CONFIG.CONNECTIONS {MC_0 {read_bw {100} write_bw {100} read_avg_burst {4} write_avg_burst {4}}} \
+   CONFIG.CATEGORY {ps_pmc} \
+ ] [get_bd_intf_pins /axi_noc_0/S05_AXI]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {128} \
+   CONFIG.CONNECTIONS {MC_1 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}} } \
+   CONFIG.CATEGORY {ps_nci} \
+ ] [get_bd_intf_pins /axi_noc_0/S06_AXI]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {128} \
+   CONFIG.CONNECTIONS {MC_2 { read_bw {1720} write_bw {1720} read_avg_burst {4} write_avg_burst {4}} } \
+   CONFIG.CATEGORY {ps_nci} \
+ ] [get_bd_intf_pins /axi_noc_0/S07_AXI]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S00_AXI} \
+ ] [get_bd_pins /axi_noc_0/aclk0]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S01_AXI} \
+ ] [get_bd_pins /axi_noc_0/aclk1]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S02_AXI} \
+ ] [get_bd_pins /axi_noc_0/aclk2]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S03_AXI} \
+ ] [get_bd_pins /axi_noc_0/aclk3]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S04_AXI} \
+ ] [get_bd_pins /axi_noc_0/aclk4]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S05_AXI} \
+ ] [get_bd_pins /axi_noc_0/aclk5]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S06_AXI} \
+ ] [get_bd_pins /axi_noc_0/aclk6]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S07_AXI} \
+ ] [get_bd_pins /axi_noc_0/aclk7]
+
+
 
   # Create variables to adapt between PS
-  set ps_m_axi ps_0/M_AXI_LPD
+  set ps_m_axi ps_0/M_AXI_FPD
   set ps_pl_clk ps_0/pl0_ref_clk
-  set ps_axi_aclk ps_0/m_axi_lpd_aclk
+  set ps_axi_aclk ps_0/m_axi_fpd_aclk
   set ps_pl_resetn ps_0/pl0_resetn
   set ps_gpio_i ps_0/LPD_GPIO_i
   set ps_gpio_o ps_0/LPD_GPIO_o
+  #connect_bd_intf_net -intf_net ps_0_M_AXI_FPD [get_bd_intf_pins ps_0/M_AXI_FPD] [get_bd_intf_pins PL/S00_AXI]
+
+  # Connect DDR
+  connect_bd_intf_net -intf_net axi_noc_0_CH0_DDR4_0 [get_bd_intf_ports ddr4_dimm1] [get_bd_intf_pins axi_noc_0/CH0_DDR4_0]
+  connect_bd_intf_net -intf_net ddr4_dimm1_sma_clk_1 [get_bd_intf_ports ddr4_dimm1_sma_clk] [get_bd_intf_pins axi_noc_0/sys_clk0]
+  # Connect axi_noc_0 to cips
+  connect_bd_intf_net -intf_net ps_0_FPD_AXI_NOC_0 [get_bd_intf_pins axi_noc_0/S06_AXI] [get_bd_intf_pins ps_0/FPD_AXI_NOC_0]
+  connect_bd_intf_net -intf_net ps_0_FPD_AXI_NOC_1 [get_bd_intf_pins axi_noc_0/S07_AXI] [get_bd_intf_pins ps_0/FPD_AXI_NOC_1]
+  connect_bd_intf_net -intf_net ps_0_FPD_CCI_NOC_0 [get_bd_intf_pins axi_noc_0/S00_AXI] [get_bd_intf_pins ps_0/FPD_CCI_NOC_0]
+  connect_bd_intf_net -intf_net ps_0_FPD_CCI_NOC_1 [get_bd_intf_pins axi_noc_0/S01_AXI] [get_bd_intf_pins ps_0/FPD_CCI_NOC_1]
+  connect_bd_intf_net -intf_net ps_0_FPD_CCI_NOC_2 [get_bd_intf_pins axi_noc_0/S02_AXI] [get_bd_intf_pins ps_0/FPD_CCI_NOC_2]
+  connect_bd_intf_net -intf_net ps_0_FPD_CCI_NOC_3 [get_bd_intf_pins axi_noc_0/S03_AXI] [get_bd_intf_pins ps_0/FPD_CCI_NOC_3]
+  connect_bd_intf_net -intf_net ps_0_LPD_AXI_NOC_0 [get_bd_intf_pins axi_noc_0/S04_AXI] [get_bd_intf_pins ps_0/LPD_AXI_NOC_0]
+  connect_bd_intf_net -intf_net ps_0_PMC_NOC_AXI_0 [get_bd_intf_pins axi_noc_0/S05_AXI] [get_bd_intf_pins ps_0/PMC_NOC_AXI_0]
+  # axi_noc_0 clocks
+  connect_bd_net [get_bd_pins axi_noc_0/aclk0] [get_bd_pins ps_0/fpd_cci_noc_axi0_clk]
+  connect_bd_net [get_bd_pins axi_noc_0/aclk1] [get_bd_pins ps_0/fpd_cci_noc_axi1_clk]
+  connect_bd_net [get_bd_pins axi_noc_0/aclk2] [get_bd_pins ps_0/fpd_cci_noc_axi2_clk]
+  connect_bd_net [get_bd_pins axi_noc_0/aclk3] [get_bd_pins ps_0/fpd_cci_noc_axi3_clk]
+  connect_bd_net [get_bd_pins axi_noc_0/aclk4] [get_bd_pins ps_0/lpd_axi_noc_clk]
+  connect_bd_net [get_bd_pins axi_noc_0/aclk5] [get_bd_pins ps_0/pmc_axi_noc_axi0_clk]
+  connect_bd_net [get_bd_pins axi_noc_0/aclk6] [get_bd_pins ps_0/fpd_axi_noc_axi0_clk]
+  connect_bd_net [get_bd_pins axi_noc_0/aclk7] [get_bd_pins ps_0/fpd_axi_noc_axi1_clk]
 
   # Create XDC file with constraints
   set xdc_fd [ open $outputDir/jtag_constraints.xdc w ]
@@ -278,9 +489,50 @@ connect_bd_net -net ps_0_pl0_ref_clk \
   [get_bd_pins axi_bram_ctrl_0/s_axi_aclk]
 
 # Create address segments
-assign_bd_address -offset 0x80000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI/reg0] -force
-assign_bd_address -offset 0x82000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
-assign_bd_address -offset 0x90000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
+# TODO: Had to change memory aperatures
+assign_bd_address -offset 0xB0000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI/reg0] -force
+assign_bd_address -offset 0xB2000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
+assign_bd_address -offset 0xC0000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
+# NoC - TODO still have problems with this
+#assign_bd_address -offset 0xA4000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
+#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_0] [get_bd_addr_segs axi_noc_0/S00_AXI/C0_DDR_LOW0] -force
+#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/LPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S04_AXI/C0_DDR_LOW0] -force
+#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW0] -force
+#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_0] [get_bd_addr_segs axi_noc_0/S00_AXI/C0_DDR_LOW1] -force
+#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/LPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S04_AXI/C0_DDR_LOW1] -force
+#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW1] -force
+#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_1] [get_bd_addr_segs axi_noc_0/S01_AXI/C1_DDR_LOW0] -force
+#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S06_AXI/C1_DDR_LOW0] -force
+#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_1] [get_bd_addr_segs axi_noc_0/S01_AXI/C1_DDR_LOW1] -force
+#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S06_AXI/C1_DDR_LOW1] -force
+#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_2] [get_bd_addr_segs axi_noc_0/S02_AXI/C2_DDR_LOW0] -force
+#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_1] [get_bd_addr_segs axi_noc_0/S07_AXI/C2_DDR_LOW0] -force
+#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_2] [get_bd_addr_segs axi_noc_0/S02_AXI/C2_DDR_LOW1] -force
+#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_1] [get_bd_addr_segs axi_noc_0/S07_AXI/C2_DDR_LOW1] -force
+#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_3] [get_bd_addr_segs axi_noc_0/S03_AXI/C3_DDR_LOW0] -force
+#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_3] [get_bd_addr_segs axi_noc_0/S03_AXI/C3_DDR_LOW1] -force
+# all get_bd_addr_segs
+#/axi_bram_ctrl_0/S_AXI/Mem0
+#/axi_noc_0/S01_AXI/C1_DDR_LOW0
+#/axi_noc_0/S01_AXI/C1_DDR_LOW1
+#/axi_noc_0/S02_AXI/C2_DDR_LOW0
+#/axi_noc_0/S02_AXI/C2_DDR_LOW1
+#/axi_noc_0/S03_AXI/C3_DDR_LOW0
+#/axi_noc_0/S03_AXI/C3_DDR_LOW1
+#/axi_noc_0/S04_AXI/C0_DDR_LOW0
+#/axi_noc_0/S04_AXI/C0_DDR_LOW1
+#/axi_noc_0/S05_AXI/C0_DDR_LOW0
+#/axi_noc_0/S05_AXI/C0_DDR_LOW1
+#/axi_noc_0/S06_AXI/C1_DDR_LOW0
+#/axi_noc_0/S06_AXI/C1_DDR_LOW1
+#/axi_noc_0/S07_AXI/C2_DDR_LOW0
+#/axi_noc_0/S07_AXI/C2_DDR_LOW1
+#/caliptra_package_top_0/S_AXI/reg0
+#/caliptra_package_top_0/s_apb/Reg
+#/ps_0/M_AXI_FPD/SEG_axi_bram_ctrl_0_Mem0
+#/ps_0/M_AXI_FPD/SEG_caliptra_package_top_0_Reg
+#/ps_0/M_AXI_FPD/SEG_caliptra_package_top_0_reg0
+
 
 # Connect JTAG signals to PS GPIO pins
 connect_bd_net [get_bd_pins caliptra_package_top_0/jtag_out] [get_bd_pins $ps_gpio_i]
@@ -306,6 +558,10 @@ set_property STEPS.SYNTH_DESIGN.ARGS.GATED_CLOCK_CONVERSION $GATED_CLOCK_CONVERS
 if {$BOARD eq "ZCU104"} {
   set_property STEPS.WRITE_BITSTREAM.ARGS.BIN_FILE true [get_runs impl_1]
 }
+
+# Place DDR MC pins... why wasn't this automatic? Is this right?
+place_ports {ddr4_dimm1_act_n[0]} AR47 {ddr4_dimm1_adr[0]} AL46 {ddr4_dimm1_adr[10]} AL42 {ddr4_dimm1_adr[11]} AK38 {ddr4_dimm1_adr[12]} AN42 {ddr4_dimm1_adr[13]} AU45 {ddr4_dimm1_adr[14]} AK39 {ddr4_dimm1_adr[15]} AK40 {ddr4_dimm1_adr[16]} AL44 {ddr4_dimm1_adr[1]} AU44 {ddr4_dimm1_adr[2]} AR44 {ddr4_dimm1_adr[3]} AM41 {ddr4_dimm1_adr[4]} AL41 {ddr4_dimm1_adr[5]} AL37 {ddr4_dimm1_adr[6]} AM38 {ddr4_dimm1_adr[7]} AP43 {ddr4_dimm1_adr[8]} AN47 {ddr4_dimm1_adr[9]} AT44 {ddr4_dimm1_ba[0]} AN43 {ddr4_dimm1_ba[1]} AL47 {ddr4_dimm1_bg[0]} AP42 {ddr4_dimm1_bg[1]} AT47 {ddr4_dimm1_ck_c[0]} AT46 {ddr4_dimm1_ck_t[0]} AR46 {ddr4_dimm1_cke[0]} AR45 {ddr4_dimm1_cs_n[0]} AL43 {ddr4_dimm1_dm_n[0]} BC41 {ddr4_dimm1_dm_n[1]} BB43 {ddr4_dimm1_dm_n[2]} BB44 {ddr4_dimm1_dm_n[3]} AR42 {ddr4_dimm1_dm_n[4]} AH46 {ddr4_dimm1_dm_n[5]} AH45 {ddr4_dimm1_dm_n[6]} AG41 {ddr4_dimm1_dm_n[7]} AG39 {ddr4_dimm1_dq[0]} BE41 {ddr4_dimm1_dq[10]} AV42 {ddr4_dimm1_dq[11]} AV43 {ddr4_dimm1_dq[12]} BE42 {ddr4_dimm1_dq[13]} BD42 {ddr4_dimm1_dq[14]} AW43 {ddr4_dimm1_dq[15]} AW42 {ddr4_dimm1_dq[16]} BD45 {ddr4_dimm1_dq[17]} BC45 {ddr4_dimm1_dq[18]} AV45 {ddr4_dimm1_dq[19]} AW44 {ddr4_dimm1_dq[1]} BF41 {ddr4_dimm1_dq[20]} BD44 {ddr4_dimm1_dq[21]} BE45 {ddr4_dimm1_dq[22]} AW45 {ddr4_dimm1_dq[23]} AY44 {ddr4_dimm1_dq[24]} AM37 {ddr4_dimm1_dq[25]} AN38 {ddr4_dimm1_dq[26]} AR39 {ddr4_dimm1_dq[27]} AT39 {ddr4_dimm1_dq[28]} AT40 {ddr4_dimm1_dq[29]} AT41 {ddr4_dimm1_dq[2]} AV41 {ddr4_dimm1_dq[30]} AP39 {ddr4_dimm1_dq[31]} AN40 {ddr4_dimm1_dq[32]} AJ47 {ddr4_dimm1_dq[33]} AH47 {ddr4_dimm1_dq[34]} AE46 {ddr4_dimm1_dq[35]} AD45 {ddr4_dimm1_dq[36]} AK47 {ddr4_dimm1_dq[37]} AK46 {ddr4_dimm1_dq[38]} AE47 {ddr4_dimm1_dq[39]} AD47 {ddr4_dimm1_dq[3]} AU41 {ddr4_dimm1_dq[40]} AJ45 {ddr4_dimm1_dq[41]} AJ44 {ddr4_dimm1_dq[42]} AE44 {ddr4_dimm1_dq[43]} AD44 {ddr4_dimm1_dq[44]} AK45 {ddr4_dimm1_dq[45]} AK44 {ddr4_dimm1_dq[46]} AE45 {ddr4_dimm1_dq[47]} AF44 {ddr4_dimm1_dq[48]} AH41 {ddr4_dimm1_dq[49]} AH40 {ddr4_dimm1_dq[4]} BG41 {ddr4_dimm1_dq[50]} AD40 {ddr4_dimm1_dq[51]} AC39 {ddr4_dimm1_dq[52]} AH39 {ddr4_dimm1_dq[53]} AJ40 {ddr4_dimm1_dq[54]} AD41 {ddr4_dimm1_dq[55]} AE40 {ddr4_dimm1_dq[56]} AG37 {ddr4_dimm1_dq[57]} AH38 {ddr4_dimm1_dq[58]} AD37 {ddr4_dimm1_dq[59]} AC37 {ddr4_dimm1_dq[5]} BF42 {ddr4_dimm1_dq[60]} AH37 {ddr4_dimm1_dq[61]} AJ38 {ddr4_dimm1_dq[62]} AD39 {ddr4_dimm1_dq[63]} AD38 {ddr4_dimm1_dq[6]} AW41 {ddr4_dimm1_dq[7]} AW40 {ddr4_dimm1_dq[8]} BC42 {ddr4_dimm1_dq[9]} BC43 {ddr4_dimm1_dqs_c[0]} BA41 {ddr4_dimm1_dqs_c[1]} BA43 {ddr4_dimm1_dqs_c[2]} BA44 {ddr4_dimm1_dqs_c[3]} AP41 {ddr4_dimm1_dqs_c[4]} AF46 {ddr4_dimm1_dqs_c[5]} AG44 {ddr4_dimm1_dqs_c[6]} AF40 {ddr4_dimm1_dqs_c[7]} AF37 {ddr4_dimm1_dqs_t[0]} AY41 {ddr4_dimm1_dqs_t[1]} AY42 {ddr4_dimm1_dqs_t[2]} AY45 {ddr4_dimm1_dqs_t[3]} AP40 {ddr4_dimm1_dqs_t[4]} AF47 {ddr4_dimm1_dqs_t[5]} AH43 {ddr4_dimm1_dqs_t[6]} AF39 {ddr4_dimm1_dqs_t[7]} AE38 {ddr4_dimm1_odt[0]} AM39 {ddr4_dimm1_reset_n[0]} AD42 {ddr4_dimm1_sma_clk_clk_n[0]} AF43 {ddr4_dimm1_sma_clk_clk_p[0]} AE42
+
 
 # Start build
 if {$BUILD} {
