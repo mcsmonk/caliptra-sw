@@ -24,10 +24,9 @@
 `define CALIPTRA_APB_ADDR_WIDTH      32 // bit-width APB address
 `define CALIPTRA_APB_DATA_WIDTH      32 // bit-width APB data
 
-module caliptra_package_top (
+module caliptra_package_apb_top (
     input wire core_clk,
 
-`ifdef CALIPTRA_APB
     // Caliptra APB Interface
     input  wire [39:0]                s_apb_paddr,
     input  wire                       s_apb_penable,
@@ -39,7 +38,99 @@ module caliptra_package_top (
     input  wire [3:0]                 s_apb_pstrb, // Leave unconnected
     input  wire [`CALIPTRA_APB_DATA_WIDTH-1:0] s_apb_pwdata,
     input  wire                       s_apb_pwrite,
-`else
+
+    // ROM AXI Interface
+    input  wire                       axi_bram_clk,
+    input  wire                       axi_bram_en,
+    input  wire [3:0]                 axi_bram_we,
+    input  wire [15:0]                axi_bram_addr,
+    input  wire [31:0]                axi_bram_din,
+    output wire [31:0]                axi_bram_dout,
+    input  wire                       axi_bram_rst,
+
+    // JTAG Interface
+    input wire [4:0]                  jtag_in,     // JTAG input signals concatenated
+    output wire [4:0]                 jtag_out,    // JTAG tdo
+
+    // FPGA Realtime register AXI Interface
+    input	wire                      S_AXI_WRAPPER_ARESETN,
+    input	wire                      S_AXI_WRAPPER_AWVALID,
+    output	wire                      S_AXI_WRAPPER_AWREADY,
+    input	wire [31:0]               S_AXI_WRAPPER_AWADDR,
+    input	wire [2:0]                S_AXI_WRAPPER_AWPROT,
+    input	wire                      S_AXI_WRAPPER_WVALID,
+    output	wire                      S_AXI_WRAPPER_WREADY,
+    input	wire [31:0]               S_AXI_WRAPPER_WDATA,
+    input	wire [3:0]                S_AXI_WRAPPER_WSTRB,
+    output	wire                      S_AXI_WRAPPER_BVALID,
+    input	wire                      S_AXI_WRAPPER_BREADY,
+    output	wire [1:0]                S_AXI_WRAPPER_BRESP,
+    input	wire                      S_AXI_WRAPPER_ARVALID,
+    output	wire                      S_AXI_WRAPPER_ARREADY,
+    input	wire [31:0]               S_AXI_WRAPPER_ARADDR,
+    input	wire [2:0]                S_AXI_WRAPPER_ARPROT,
+    output	wire                      S_AXI_WRAPPER_RVALID,
+    input	wire                      S_AXI_WRAPPER_RREADY,
+    output	wire [31:0]               S_AXI_WRAPPER_RDATA,
+    output	wire [1:0]                S_AXI_WRAPPER_RRESP
+    );
+
+caliptra_wrapper_top cptra_wrapper (
+    .core_clk(core_clk),
+
+    .PADDR(s_apb_paddr[`CALIPTRA_APB_ADDR_WIDTH-1:0]),
+    .PPROT(s_apb_pprot),
+    .PENABLE(s_apb_penable),
+    .PRDATA(s_apb_prdata),
+    .PREADY(s_apb_pready),
+    .PSEL(s_apb_psel),
+    .PSLVERR(s_apb_pslverr),
+    .PWDATA(s_apb_pwdata),
+    .PWRITE(s_apb_pwrite),
+
+    // SOC access to program ROM
+    .axi_bram_clk(axi_bram_clk),
+    .axi_bram_en(axi_bram_en),
+    .axi_bram_we(axi_bram_we),
+    .axi_bram_addr(axi_bram_addr[15:2]),
+    .axi_bram_wrdata(axi_bram_din),
+    .axi_bram_rddata(axi_bram_dout),
+    .axi_bram_rst(axi_bram_rst),
+
+    // EL2 JTAG interface
+    .jtag_tck(jtag_in[0]),
+    .jtag_tdi(jtag_in[1]),
+    .jtag_tms(jtag_in[2]),
+    .jtag_trst_n(jtag_in[3]),
+    .jtag_tdo(jtag_out[4]),
+
+    // FPGA Realtime register AXI Interface
+    .S_AXI_WRAPPER_ARESETN(S_AXI_WRAPPER_ARESETN),
+    .S_AXI_WRAPPER_AWVALID(S_AXI_WRAPPER_AWVALID),
+    .S_AXI_WRAPPER_AWREADY(S_AXI_WRAPPER_AWREADY),
+    .S_AXI_WRAPPER_AWADDR(S_AXI_WRAPPER_AWADDR),
+    .S_AXI_WRAPPER_AWPROT(S_AXI_WRAPPER_AWPROT),
+    .S_AXI_WRAPPER_WVALID(S_AXI_WRAPPER_WVALID),
+    .S_AXI_WRAPPER_WREADY(S_AXI_WRAPPER_WREADY),
+    .S_AXI_WRAPPER_WDATA(S_AXI_WRAPPER_WDATA),
+    .S_AXI_WRAPPER_WSTRB(S_AXI_WRAPPER_WSTRB),
+    .S_AXI_WRAPPER_BVALID(S_AXI_WRAPPER_BVALID),
+    .S_AXI_WRAPPER_BREADY(S_AXI_WRAPPER_BREADY),
+    .S_AXI_WRAPPER_BRESP(S_AXI_WRAPPER_BRESP),
+    .S_AXI_WRAPPER_ARVALID(S_AXI_WRAPPER_ARVALID),
+    .S_AXI_WRAPPER_ARREADY(S_AXI_WRAPPER_ARREADY),
+    .S_AXI_WRAPPER_ARADDR(S_AXI_WRAPPER_ARADDR),
+    .S_AXI_WRAPPER_ARPROT(S_AXI_WRAPPER_ARPROT),
+    .S_AXI_WRAPPER_RVALID(S_AXI_WRAPPER_RVALID),
+    .S_AXI_WRAPPER_RREADY(S_AXI_WRAPPER_RREADY),
+    .S_AXI_WRAPPER_RDATA(S_AXI_WRAPPER_RDATA),
+    .S_AXI_WRAPPER_RRESP(S_AXI_WRAPPER_RRESP)
+);
+
+endmodule
+module caliptra_package_axi_top (
+    input wire core_clk,
+
     // Caliptra AXI Interface
     input  wire [31:0] S_AXI_CALIPTRA_AWADDR,
     input  wire [1:0] S_AXI_CALIPTRA_AWBURST,
@@ -78,7 +169,6 @@ module caliptra_package_top (
     output wire S_AXI_CALIPTRA_RLAST,
     output wire S_AXI_CALIPTRA_RVALID,
     input  wire S_AXI_CALIPTRA_RREADY,
-`endif
 
     // ROM AXI Interface
     input  wire                       axi_bram_clk,
@@ -94,42 +184,31 @@ module caliptra_package_top (
     output wire [4:0]                 jtag_out,    // JTAG tdo
 
     // FPGA Realtime register AXI Interface
-    input	wire                      S_AXI_ARESETN,
-    input	wire                      S_AXI_AWVALID,
-    output	wire                      S_AXI_AWREADY,
-    input	wire [31:0]               S_AXI_AWADDR,
-    input	wire [2:0]                S_AXI_AWPROT,
-    input	wire                      S_AXI_WVALID,
-    output	wire                      S_AXI_WREADY,
-    input	wire [31:0]               S_AXI_WDATA,
-    input	wire [3:0]                S_AXI_WSTRB,
-    output	wire                      S_AXI_BVALID,
-    input	wire                      S_AXI_BREADY,
-    output	wire [1:0]                S_AXI_BRESP,
-    input	wire                      S_AXI_ARVALID,
-    output	wire                      S_AXI_ARREADY,
-    input	wire [31:0]               S_AXI_ARADDR,
-    input	wire [2:0]                S_AXI_ARPROT,
-    output	wire                      S_AXI_RVALID,
-    input	wire                      S_AXI_RREADY,
-    output	wire [31:0]               S_AXI_RDATA,
-    output	wire [1:0]                S_AXI_RRESP
+    input	wire                      S_AXI_WRAPPER_ARESETN,
+    input	wire                      S_AXI_WRAPPER_AWVALID,
+    output	wire                      S_AXI_WRAPPER_AWREADY,
+    input	wire [31:0]               S_AXI_WRAPPER_AWADDR,
+    input	wire [2:0]                S_AXI_WRAPPER_AWPROT,
+    input	wire                      S_AXI_WRAPPER_WVALID,
+    output	wire                      S_AXI_WRAPPER_WREADY,
+    input	wire [31:0]               S_AXI_WRAPPER_WDATA,
+    input	wire [3:0]                S_AXI_WRAPPER_WSTRB,
+    output	wire                      S_AXI_WRAPPER_BVALID,
+    input	wire                      S_AXI_WRAPPER_BREADY,
+    output	wire [1:0]                S_AXI_WRAPPER_BRESP,
+    input	wire                      S_AXI_WRAPPER_ARVALID,
+    output	wire                      S_AXI_WRAPPER_ARREADY,
+    input	wire [31:0]               S_AXI_WRAPPER_ARADDR,
+    input	wire [2:0]                S_AXI_WRAPPER_ARPROT,
+    output	wire                      S_AXI_WRAPPER_RVALID,
+    input	wire                      S_AXI_WRAPPER_RREADY,
+    output	wire [31:0]               S_AXI_WRAPPER_RDATA,
+    output	wire [1:0]                S_AXI_WRAPPER_RRESP
     );
 
 caliptra_wrapper_top cptra_wrapper (
     .core_clk(core_clk),
 
-`ifdef CALIPTRA_APB
-    .PADDR(s_apb_paddr[`CALIPTRA_APB_ADDR_WIDTH-1:0]),
-    .PPROT(s_apb_pprot),
-    .PENABLE(s_apb_penable),
-    .PRDATA(s_apb_prdata),
-    .PREADY(s_apb_pready),
-    .PSEL(s_apb_psel),
-    .PSLVERR(s_apb_pslverr),
-    .PWDATA(s_apb_pwdata),
-    .PWRITE(s_apb_pwrite)
-`else
     // Caliptra AXI Interface
     .S_AXI_CALIPTRA_AWADDR(S_AXI_CALIPTRA_AWADDR),
     .S_AXI_CALIPTRA_AWBURST(S_AXI_CALIPTRA_AWBURST),
@@ -164,7 +243,6 @@ caliptra_wrapper_top cptra_wrapper (
     .S_AXI_CALIPTRA_RLAST(S_AXI_CALIPTRA_RLAST),
     .S_AXI_CALIPTRA_RVALID(S_AXI_CALIPTRA_RVALID),
     .S_AXI_CALIPTRA_RREADY(S_AXI_CALIPTRA_RREADY),
-`endif
 
     // SOC access to program ROM
     .axi_bram_clk(axi_bram_clk),
@@ -183,26 +261,26 @@ caliptra_wrapper_top cptra_wrapper (
     .jtag_tdo(jtag_out[4]),
 
     // FPGA Realtime register AXI Interface
-    .S_AXI_ARESETN(S_AXI_ARESETN),
-    .S_AXI_AWVALID(S_AXI_AWVALID),
-    .S_AXI_AWREADY(S_AXI_AWREADY),
-    .S_AXI_AWADDR(S_AXI_AWADDR),
-    .S_AXI_AWPROT(S_AXI_AWPROT),
-    .S_AXI_WVALID(S_AXI_WVALID),
-    .S_AXI_WREADY(S_AXI_WREADY),
-    .S_AXI_WDATA(S_AXI_WDATA),
-    .S_AXI_WSTRB(S_AXI_WSTRB),
-    .S_AXI_BVALID(S_AXI_BVALID),
-    .S_AXI_BREADY(S_AXI_BREADY),
-    .S_AXI_BRESP(S_AXI_BRESP),
-    .S_AXI_ARVALID(S_AXI_ARVALID),
-    .S_AXI_ARREADY(S_AXI_ARREADY),
-    .S_AXI_ARADDR(S_AXI_ARADDR),
-    .S_AXI_ARPROT(S_AXI_ARPROT),
-    .S_AXI_RVALID(S_AXI_RVALID),
-    .S_AXI_RREADY(S_AXI_RREADY),
-    .S_AXI_RDATA(S_AXI_RDATA),
-    .S_AXI_RRESP(S_AXI_RRESP)
+    .S_AXI_WRAPPER_ARESETN(S_AXI_WRAPPER_ARESETN),
+    .S_AXI_WRAPPER_AWVALID(S_AXI_WRAPPER_AWVALID),
+    .S_AXI_WRAPPER_AWREADY(S_AXI_WRAPPER_AWREADY),
+    .S_AXI_WRAPPER_AWADDR(S_AXI_WRAPPER_AWADDR),
+    .S_AXI_WRAPPER_AWPROT(S_AXI_WRAPPER_AWPROT),
+    .S_AXI_WRAPPER_WVALID(S_AXI_WRAPPER_WVALID),
+    .S_AXI_WRAPPER_WREADY(S_AXI_WRAPPER_WREADY),
+    .S_AXI_WRAPPER_WDATA(S_AXI_WRAPPER_WDATA),
+    .S_AXI_WRAPPER_WSTRB(S_AXI_WRAPPER_WSTRB),
+    .S_AXI_WRAPPER_BVALID(S_AXI_WRAPPER_BVALID),
+    .S_AXI_WRAPPER_BREADY(S_AXI_WRAPPER_BREADY),
+    .S_AXI_WRAPPER_BRESP(S_AXI_WRAPPER_BRESP),
+    .S_AXI_WRAPPER_ARVALID(S_AXI_WRAPPER_ARVALID),
+    .S_AXI_WRAPPER_ARREADY(S_AXI_WRAPPER_ARREADY),
+    .S_AXI_WRAPPER_ARADDR(S_AXI_WRAPPER_ARADDR),
+    .S_AXI_WRAPPER_ARPROT(S_AXI_WRAPPER_ARPROT),
+    .S_AXI_WRAPPER_RVALID(S_AXI_WRAPPER_RVALID),
+    .S_AXI_WRAPPER_RREADY(S_AXI_WRAPPER_RREADY),
+    .S_AXI_WRAPPER_RDATA(S_AXI_WRAPPER_RDATA),
+    .S_AXI_WRAPPER_RRESP(S_AXI_WRAPPER_RRESP)
 );
 
 endmodule

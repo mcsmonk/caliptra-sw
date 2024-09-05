@@ -120,7 +120,9 @@ set_property -dict [list \
   CONFIG.asymmetric_port_width {true} \
 ] [get_ips itrng_fifo]
 
+puts "Fileset when setting defines: [current_fileset]"
 set_property verilog_define $VERILOG_OPTIONS [current_fileset]
+puts "\n\nVERILOG DEFINES: [get_property verilog_define [current_fileset]]"
 
 # Add VEER Headers
 add_files $rtlDir/src/riscv_core/veer_el2/rtl/el2_param.vh
@@ -163,24 +165,35 @@ set_property include_dirs $rtlDir/src/integration/rtl [current_fileset]
 
 
 # Set caliptra_package_top as top in case next steps fail so that the top is something useful.
-set_property top caliptra_package_top [current_fileset]
+if {$APB} {
+  set_property top caliptra_package_apb_top [current_fileset]
+} else {
+  set_property top caliptra_package_axi_top [current_fileset]
+}
 
 # Create block diagram that includes an instance of caliptra_package_top
 create_bd_design "caliptra_package_bd"
-create_bd_cell -type module -reference caliptra_package_top caliptra_package_top_0
+if {$APB} {
+  create_bd_cell -type module -reference caliptra_package_apb_top caliptra_package_top_0
+} else {
+  create_bd_cell -type module -reference caliptra_package_axi_top caliptra_package_top_0
+}
 save_bd_design
 close_bd_design [get_bd_designs caliptra_package_bd]
 
 # Package IP
+puts "Fileset when packaging: [current_fileset]"
+puts "\n\nVERILOG DEFINES: [get_property verilog_define [current_fileset]]"
 ipx::package_project -root_dir $packageDir -vendor design -library user -taxonomy /UserIP -import_files -set_current false
 ipx::unload_core $packageDir/component.xml
 ipx::edit_ip_in_project -upgrade true -name tmp_edit_project -directory $packageDir $packageDir/component.xml
 ipx::infer_bus_interfaces xilinx.com:interface:apb_rtl:1.0 [ipx::current_core]
 ipx::infer_bus_interfaces xilinx.com:interface:bram_rtl:1.0 [ipx::current_core]
-set_property value BRAM_CTRL [ipx::get_bus_parameters MASTER_TYPE -of_objects [ipx::get_bus_interfaces axi_bram -of_objects [ipx::current_core]]]
-ipx::associate_bus_interfaces -busif S_AXI -clock core_clk [ipx::current_core]
+ipx::add_bus_parameter MASTER_TYPE [ipx::get_bus_interfaces axi_bram -of_objects [ipx::current_core]]
+ipx::associate_bus_interfaces -busif S_AXI_WRAPPER -clock core_clk [ipx::current_core]
 ipx::associate_bus_interfaces -busif S_AXI_CALIPTRA -clock core_clk [ipx::current_core]
 ipx::associate_bus_interfaces -busif axi_bram -clock axi_bram_clk [ipx::current_core]
+set_property name caliptra_package_top [ipx::current_core]
 set_property core_revision 1 [ipx::current_core]
 ipx::update_source_project_archive -component [ipx::current_core]
 ipx::create_xgui_files [ipx::current_core]
@@ -258,10 +271,10 @@ connect_bd_intf_net [get_bd_intf_pins axi_bram_ctrl_0/S_AXI] -boundary_type uppe
 connect_bd_intf_net [get_bd_intf_pins caliptra_package_top_0/axi_bram] [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTA]
 
 # Create port connections
-connect_bd_net -net proc_sys_reset_0_peripheral_aresetn [get_bd_pins axi_apb_bridge_0/s_axi_aresetn] [get_bd_pins caliptra_package_top_0/S_AXI_ARESETN] [get_bd_pins axi_interconnect_0/ARESETN] [get_bd_pins axi_interconnect_0/M00_ARESETN] [get_bd_pins axi_interconnect_0/M01_ARESETN] [get_bd_pins axi_interconnect_0/S00_ARESETN] [get_bd_pins proc_sys_reset_0/peripheral_aresetn]
+connect_bd_net -net proc_sys_reset_0_peripheral_aresetn [get_bd_pins axi_apb_bridge_0/s_axi_aresetn] [get_bd_pins caliptra_package_top_0/S_AXI_WRAPPER_ARESETN] [get_bd_pins axi_interconnect_0/ARESETN] [get_bd_pins axi_interconnect_0/M00_ARESETN] [get_bd_pins axi_interconnect_0/M01_ARESETN] [get_bd_pins axi_interconnect_0/S00_ARESETN] [get_bd_pins proc_sys_reset_0/peripheral_aresetn]
 connect_bd_net -net zynq_ultra_ps_e_0_pl_clk0 [get_bd_pins axi_apb_bridge_0/s_axi_aclk] [get_bd_pins axi_interconnect_0/ACLK] [get_bd_pins axi_interconnect_0/M00_ACLK] [get_bd_pins axi_interconnect_0/M01_ACLK] [get_bd_pins axi_interconnect_0/S00_ACLK] [get_bd_pins caliptra_package_top_0/core_clk] [get_bd_pins proc_sys_reset_0/slowest_sync_clk] [get_bd_pins zynq_ultra_ps_e_0/maxihpm0_lpd_aclk] [get_bd_pins zynq_ultra_ps_e_0/pl_clk0]
 # Caliptra SOC adapter connections
-connect_bd_intf_net -boundary_type upper [get_bd_intf_pins axi_interconnect_0/M00_AXI] [get_bd_intf_pins caliptra_package_top_0/S_AXI]
+connect_bd_intf_net -boundary_type upper [get_bd_intf_pins axi_interconnect_0/M00_AXI] [get_bd_intf_pins caliptra_package_top_0/S_AXI_WRAPPER]
 
 connect_bd_net -net zynq_ultra_ps_e_0_pl_resetn0 [get_bd_pins proc_sys_reset_0/ext_reset_in] [get_bd_pins zynq_ultra_ps_e_0/pl_resetn0]
 connect_bd_net [get_bd_pins axi_bram_ctrl_0/s_axi_aclk] [get_bd_pins zynq_ultra_ps_e_0/pl_clk0]
@@ -270,7 +283,7 @@ connect_bd_net [get_bd_pins axi_interconnect_0/M02_ACLK] [get_bd_pins zynq_ultra
 connect_bd_net [get_bd_pins axi_interconnect_0/M02_ARESETN] [get_bd_pins proc_sys_reset_0/peripheral_aresetn]
 
 # Create address segments
-assign_bd_address -offset 0x80000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI/reg0] -force
+assign_bd_address -offset 0x80000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI_WRAPPER/reg0] -force
 assign_bd_address -offset 0x82000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
 if {$APB} {
   assign_bd_address -offset 0x90000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
@@ -295,7 +308,9 @@ if {$JTAG} {
 }
 
 save_bd_design
+puts "Fileset when setting defines the second time: [current_fileset]"
 set_property verilog_define $VERILOG_OPTIONS [current_fileset]
+puts "\n\nVERILOG DEFINES: [get_property verilog_define [current_fileset]]"
 
 # Create the HDL wrapper for the block design and add it. This will be set as top.
 make_wrapper -files [get_files $outputDir/caliptra_fpga_project.srcs/sources_1/bd/caliptra_fpga_project_bd/caliptra_fpga_project_bd.bd] -top
