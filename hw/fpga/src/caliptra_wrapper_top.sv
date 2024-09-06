@@ -129,6 +129,76 @@ module caliptra_wrapper_top (
     logic [`CALIPTRA_IMEM_ADDR_WIDTH-1:0] imem_addr;
     logic [`CALIPTRA_IMEM_DATA_WIDTH-1:0] imem_rdata;
 
+`ifndef CALIPTRA_APB
+    axi_if #(
+        .AW(`CALIPTRA_SLAVE_ADDR_WIDTH(`CALIPTRA_SLAVE_SEL_SOC_IFC)),
+        .DW(`CALIPTRA_AXI_DATA_WIDTH),
+        .IW(`CALIPTRA_AXI_ID_WIDTH),
+        .UW(`CALIPTRA_AXI_USER_WIDTH)
+    ) s_axi (.clk(core_clk), .rst_n(hwif_out.interface_regs.control.cptra_rst_b.value));
+
+    // AW
+    assign s_axi.awaddr   = S_AXI_CALIPTRA_AWADDR;
+    assign s_axi.awburst  = S_AXI_CALIPTRA_AWBURST;
+    assign s_axi.awsize   = S_AXI_CALIPTRA_AWSIZE;
+    assign s_axi.awlen    = S_AXI_CALIPTRA_AWLEN;
+    assign s_axi.awuser   = S_AXI_CALIPTRA_AWUSER;
+    assign s_axi.awid     = hwif_out.interface_regs.pauser.pauser.value; // S_AXI_CALIPTRA_AWID;
+    assign s_axi.awlock   = S_AXI_CALIPTRA_AWLOCK;
+    assign s_axi.awvalid  = S_AXI_CALIPTRA_AWVALID;
+    assign S_AXI_CALIPTRA_AWREADY = s_axi.awready;
+    // W
+    assign s_axi.wdata    = S_AXI_CALIPTRA_WDATA;
+    assign s_axi.wstrb    = S_AXI_CALIPTRA_WSTRB;
+    assign s_axi.wvalid   = S_AXI_CALIPTRA_WVALID;
+    assign S_AXI_CALIPTRA_WREADY = s_axi.wready;
+    assign s_axi.wlast    = S_AXI_CALIPTRA_WLAST;
+    // B
+    assign S_AXI_CALIPTRA_BRESP  = s_axi.bresp;
+    //assign S_AXI_CALIPTRA_BID    = s_axi.bid;
+    assign S_AXI_CALIPTRA_BVALID = s_axi.bvalid;
+    assign s_axi.bready  = S_AXI_CALIPTRA_BREADY;
+    // AR
+    assign s_axi.araddr  = S_AXI_CALIPTRA_ARADDR;
+    assign s_axi.arburst = S_AXI_CALIPTRA_ARBURST;
+    assign s_axi.arsize  = S_AXI_CALIPTRA_ARSIZE;
+    assign s_axi.arlen   = S_AXI_CALIPTRA_ARLEN;
+    assign s_axi.aruser  = S_AXI_CALIPTRA_ARUSER;
+    assign s_axi.arid    = hwif_out.interface_regs.pauser.pauser.value; // S_AXI_CALIPTRA_ARID;
+    assign s_axi.arlock  = S_AXI_CALIPTRA_ARLOCK;
+    assign s_axi.arvalid = S_AXI_CALIPTRA_ARVALID;
+    assign S_AXI_CALIPTRA_ARREADY = s_axi.arready;
+    // R
+    assign S_AXI_CALIPTRA_RDATA  = s_axi.rdata;
+    assign S_AXI_CALIPTRA_RRESP  = s_axi.rresp;
+    //assign S_AXI_CALIPTRA_RID    = s_axi.rid;
+    assign S_AXI_CALIPTRA_RLAST  = s_axi.rlast;
+    assign S_AXI_CALIPTRA_RVALID = s_axi.rvalid;
+    assign s_axi.rready = S_AXI_CALIPTRA_RREADY;
+
+    // TODO: FPGA AXI manager changes ID values from transaction to transaction. Caliptra
+    // does not expect that. Replace the input ID values with the PAUSER register and
+    // return the RID values that the manager expects.
+    always@(posedge core_clk or negedge hwif_out.interface_regs.control.cptra_rst_b.value) begin
+        if (~hwif_out.interface_regs.control.cptra_rst_b.value) begin
+            S_AXI_CALIPTRA_RID <= 0;
+            S_AXI_CALIPTRA_BID <= 0;
+        end
+        else begin
+            S_AXI_CALIPTRA_RID <= S_AXI_CALIPTRA_ARID;
+            S_AXI_CALIPTRA_BID <= S_AXI_CALIPTRA_AWID;
+        end
+    end
+
+    // Unused master interface
+    axi_if #(
+        .AW(`CALIPTRA_SLAVE_ADDR_WIDTH(`CALIPTRA_SLAVE_SEL_SOC_IFC)),
+        .DW(`CALIPTRA_AXI_DATA_WIDTH),
+        .IW(`CALIPTRA_AXI_ID_WIDTH),
+        .UW(`CALIPTRA_AXI_USER_WIDTH)
+    ) m_axi (.clk(core_clk), .rst_n(hwif_out.interface_regs.control.cptra_rst_b.value));
+
+`endif
     el2_mem_if el2_mem_export ();
 
     initial begin
