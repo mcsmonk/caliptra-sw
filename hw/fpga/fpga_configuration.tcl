@@ -487,7 +487,6 @@ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_0
 set_property location {1 177 345} [get_bd_cells ps_0]
 set_property location {2 696 373} [get_bd_cells axi_interconnect_0]
 set_property location {2 707 654} [get_bd_cells proc_sys_reset_0]
-set_property location {3 1041 439} [get_bd_cells axi_apb_bridge_0]
 set_property location {3 1151 617} [get_bd_cells axi_bram_ctrl_0]
 set_property location {4 1335 456} [get_bd_cells caliptra_package_top_0]
 
@@ -547,16 +546,15 @@ if {$BOARD eq "ZCU104"} {
   assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/LPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S04_AXI/C0_DDR_LOW0] -force
   assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/LPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S04_AXI/C0_DDR_LOW1] -force
   assign_bd_address -offset 0xA4000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
-  assign_bd_address -offset 0xA4100000 -range 0x00100000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
-  assign_bd_address -offset 0xA4200000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs caliptra_package_top_0/S_AXI/reg0] -force
+  if {$APB} {
+    assign_bd_address -offset 0xA4100000 -range 0x00100000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
+  } else {
+    assign_bd_address -offset 0xA4100000 -range 0x00100000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs caliptra_package_top_0/S_AXI_CALIPTRA/reg0] -force
+  }
+  assign_bd_address -offset 0xA4200000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs caliptra_package_top_0/S_AXI_WRAPPER/reg0] -force
   assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW0] -force
   assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW1] -force
 }
-
-if {$JTAG} {
-  # Connect JTAG signals to PS GPIO pins
-  connect_bd_net [get_bd_pins caliptra_package_top_0/jtag_out] [get_bd_pins zynq_ultra_ps_e_0/emio_gpio_i]
-  connect_bd_net [get_bd_pins caliptra_package_top_0/jtag_in]  [get_bd_pins zynq_ultra_ps_e_0/emio_gpio_o]
 
 # Connect JTAG signals to PS GPIO pins
 connect_bd_net [get_bd_pins caliptra_package_top_0/jtag_out] [get_bd_pins $ps_gpio_i]
