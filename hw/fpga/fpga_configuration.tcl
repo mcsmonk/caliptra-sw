@@ -233,6 +233,8 @@ if {$BOARD eq "ZCU104"} {
       PS_GEN_IPI4_ENABLE {1} \
       PS_GEN_IPI5_ENABLE {1} \
       PS_GEN_IPI6_ENABLE {1} \
+      PS_GPIO_EMIO_PERIPHERAL_ENABLE {1} \
+      PS_GPIO_EMIO_WIDTH {5} \
       PS_HSDP_EGRESS_TRAFFIC {JTAG} \
       PS_HSDP_INGRESS_TRAFFIC {JTAG} \
       PS_HSDP_MODE {NONE} \
@@ -243,9 +245,9 @@ if {$BOARD eq "ZCU104"} {
       PS_MIO7 {{AUX_IO 0} {DIRECTION in} {DRIVE_STRENGTH 8mA} {OUTPUT_DATA default} {PULL disable} {SCHMITT 0} {SLEW slow} {USAGE Reserved}} \
       PS_MIO9 {{AUX_IO 0} {DIRECTION in} {DRIVE_STRENGTH 8mA} {OUTPUT_DATA default} {PULL disable} {SCHMITT 0} {SLEW slow} {USAGE Reserved}} \
       PS_NUM_FABRIC_RESETS {1} \
-      PS_PCIE_EP_RESET1_IO {PMC_MIO 38} \
-      PS_PCIE_EP_RESET2_IO {PMC_MIO 39} \
-      PS_PCIE_RESET {ENABLE 1} \
+      PS_PCIE_EP_RESET1_IO {None} \
+      PS_PCIE_EP_RESET2_IO {None} \
+      PS_PCIE_RESET {{ENABLE 1}} \
       PS_PL_CONNECTIVITY_MODE {Custom} \
       PS_UART0_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 42 .. 43}}} \
       PS_USB3_PERIPHERAL {{ENABLE 1} {IO {PMC_MIO 13 .. 25}}} \
@@ -262,8 +264,6 @@ if {$BOARD eq "ZCU104"} {
       SMON_ALARMS {Set_Alarms_On} \
       SMON_ENABLE_TEMP_AVERAGING {0} \
       SMON_TEMP_AVERAGING_SAMPLES {0} \
-      PS_GPIO_EMIO_WIDTH {5} \
-      PS_GPIO_EMIO_PERIPHERAL_ENABLE {1} \
     } \
   ] [get_bd_cells ps_0]
   #  CONFIG.PS_BOARD_INTERFACE {ps_pmc_fixed_io} \
@@ -273,23 +273,37 @@ if {$BOARD eq "ZCU104"} {
   set axi_noc_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc axi_noc_0 ]
   set_property -dict [ list \
    CONFIG.CONTROLLERTYPE {DDR4_SDRAM} \
-   CONFIG.MC_CHAN_REGION1 {DDR_LOW1} \
-   CONFIG.MC_COMPONENT_WIDTH {x8} \
-   CONFIG.MC_DATAWIDTH {64} \
-   CONFIG.MC_INPUTCLK0_PERIOD {5000} \
-   CONFIG.MC_INTERLEAVE_SIZE {128} \
-   CONFIG.MC_MEMORY_DEVICETYPE {UDIMMs} \
-   CONFIG.MC_MEMORY_SPEEDGRADE {DDR4-3200AA(22-22-22)} \
-   CONFIG.MC_NO_CHANNELS {Single} \
-   CONFIG.MC_RANK {1} \
-   CONFIG.MC_ROWADDRESSWIDTH {16} \
-   CONFIG.MC_STACKHEIGHT {1} \
-   CONFIG.MC_SYSTEM_CLOCK {Differential} \
-   CONFIG.NUM_CLKS {8} \
-   CONFIG.NUM_MC {1} \
-   CONFIG.NUM_MCP {4} \
-   CONFIG.NUM_MI {0} \
-   CONFIG.NUM_SI {8} \
+    CONFIG.MC0_CONFIG_NUM {config17} \
+    CONFIG.MC1_CONFIG_NUM {config17} \
+    CONFIG.MC2_CONFIG_NUM {config17} \
+    CONFIG.MC3_CONFIG_NUM {config17} \
+    CONFIG.MC_CASLATENCY {22} \
+    CONFIG.MC_CHAN_REGION1 {DDR_LOW1} \
+    CONFIG.MC_COMPONENT_WIDTH {x8} \
+    CONFIG.MC_CONFIG_NUM {config17} \
+    CONFIG.MC_DATAWIDTH {64} \
+    CONFIG.MC_DDR4_2T {Disable} \
+    CONFIG.MC_F1_TRCD {13750} \
+    CONFIG.MC_F1_TRCDMIN {13750} \
+    CONFIG.MC_INPUTCLK0_PERIOD {5000} \
+    CONFIG.MC_MEMORY_DEVICETYPE {UDIMMs} \
+    CONFIG.MC_MEMORY_SPEEDGRADE {DDR4-3200AA(22-22-22)} \
+    CONFIG.MC_NO_CHANNELS {Single} \
+    CONFIG.MC_RANK {1} \
+    CONFIG.MC_ROWADDRESSWIDTH {16} \
+    CONFIG.MC_STACKHEIGHT {1} \
+    CONFIG.MC_SYSTEM_CLOCK {Differential} \
+    CONFIG.MC_TRC {45750} \
+    CONFIG.MC_TRCD {13750} \
+    CONFIG.MC_TRCDMIN {13750} \
+    CONFIG.MC_TRCMIN {45750} \
+    CONFIG.MC_TRP {13750} \
+    CONFIG.MC_TRPMIN {13750} \
+    CONFIG.NUM_CLKS {8} \
+    CONFIG.NUM_MC {1} \
+    CONFIG.NUM_MCP {4} \
+    CONFIG.NUM_MI {0} \
+    CONFIG.NUM_SI {8} \
  ] $axi_noc_0
   #  CONFIG.CH0_DDR4_0_BOARD_INTERFACE {ddr4_dimm1} \
   #  CONFIG.sys_clk0_BOARD_INTERFACE {ddr4_dimm1_sma_clk} \
@@ -489,49 +503,26 @@ connect_bd_net -net ps_0_pl0_ref_clk \
   [get_bd_pins axi_bram_ctrl_0/s_axi_aclk]
 
 # Create address segments
-# TODO: Had to change memory aperatures
-assign_bd_address -offset 0xB0000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI/reg0] -force
-assign_bd_address -offset 0xB2000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
-assign_bd_address -offset 0xC0000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces ps_0/Data] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
-# NoC - TODO still have problems with this
-#assign_bd_address -offset 0xA4000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
-#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_0] [get_bd_addr_segs axi_noc_0/S00_AXI/C0_DDR_LOW0] -force
-#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/LPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S04_AXI/C0_DDR_LOW0] -force
-#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW0] -force
-#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_0] [get_bd_addr_segs axi_noc_0/S00_AXI/C0_DDR_LOW1] -force
-#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/LPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S04_AXI/C0_DDR_LOW1] -force
-#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW1] -force
-#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_1] [get_bd_addr_segs axi_noc_0/S01_AXI/C1_DDR_LOW0] -force
-#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S06_AXI/C1_DDR_LOW0] -force
-#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_1] [get_bd_addr_segs axi_noc_0/S01_AXI/C1_DDR_LOW1] -force
-#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S06_AXI/C1_DDR_LOW1] -force
-#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_2] [get_bd_addr_segs axi_noc_0/S02_AXI/C2_DDR_LOW0] -force
-#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_1] [get_bd_addr_segs axi_noc_0/S07_AXI/C2_DDR_LOW0] -force
-#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_2] [get_bd_addr_segs axi_noc_0/S02_AXI/C2_DDR_LOW1] -force
-#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_1] [get_bd_addr_segs axi_noc_0/S07_AXI/C2_DDR_LOW1] -force
-#assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_3] [get_bd_addr_segs axi_noc_0/S03_AXI/C3_DDR_LOW0] -force
-#assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_3] [get_bd_addr_segs axi_noc_0/S03_AXI/C3_DDR_LOW1] -force
-# all get_bd_addr_segs
-#/axi_bram_ctrl_0/S_AXI/Mem0
-#/axi_noc_0/S01_AXI/C1_DDR_LOW0
-#/axi_noc_0/S01_AXI/C1_DDR_LOW1
-#/axi_noc_0/S02_AXI/C2_DDR_LOW0
-#/axi_noc_0/S02_AXI/C2_DDR_LOW1
-#/axi_noc_0/S03_AXI/C3_DDR_LOW0
-#/axi_noc_0/S03_AXI/C3_DDR_LOW1
-#/axi_noc_0/S04_AXI/C0_DDR_LOW0
-#/axi_noc_0/S04_AXI/C0_DDR_LOW1
-#/axi_noc_0/S05_AXI/C0_DDR_LOW0
-#/axi_noc_0/S05_AXI/C0_DDR_LOW1
-#/axi_noc_0/S06_AXI/C1_DDR_LOW0
-#/axi_noc_0/S06_AXI/C1_DDR_LOW1
-#/axi_noc_0/S07_AXI/C2_DDR_LOW0
-#/axi_noc_0/S07_AXI/C2_DDR_LOW1
-#/caliptra_package_top_0/S_AXI/reg0
-#/caliptra_package_top_0/s_apb/Reg
-#/ps_0/M_AXI_FPD/SEG_axi_bram_ctrl_0_Mem0
-#/ps_0/M_AXI_FPD/SEG_caliptra_package_top_0_Reg
-#/ps_0/M_AXI_FPD/SEG_caliptra_package_top_0_reg0
+  # Create address segments
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S06_AXI/C1_DDR_LOW0] -force
+  assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S06_AXI/C1_DDR_LOW1] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_1] [get_bd_addr_segs axi_noc_0/S07_AXI/C2_DDR_LOW0] -force
+  assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_1] [get_bd_addr_segs axi_noc_0/S07_AXI/C2_DDR_LOW1] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_0] [get_bd_addr_segs axi_noc_0/S00_AXI/C0_DDR_LOW0] -force
+  assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_0] [get_bd_addr_segs axi_noc_0/S00_AXI/C0_DDR_LOW1] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_1] [get_bd_addr_segs axi_noc_0/S01_AXI/C1_DDR_LOW0] -force
+  assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_1] [get_bd_addr_segs axi_noc_0/S01_AXI/C1_DDR_LOW1] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_2] [get_bd_addr_segs axi_noc_0/S02_AXI/C2_DDR_LOW0] -force
+  assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_2] [get_bd_addr_segs axi_noc_0/S02_AXI/C2_DDR_LOW1] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_3] [get_bd_addr_segs axi_noc_0/S03_AXI/C3_DDR_LOW0] -force
+  assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_CCI_NOC_3] [get_bd_addr_segs axi_noc_0/S03_AXI/C3_DDR_LOW1] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/LPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S04_AXI/C0_DDR_LOW0] -force
+  assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/LPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S04_AXI/C0_DDR_LOW1] -force
+  assign_bd_address -offset 0xA4000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
+  assign_bd_address -offset 0xA4100000 -range 0x00100000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
+  assign_bd_address -offset 0xA4200000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs caliptra_package_top_0/S_AXI/reg0] -force
+  assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW0] -force
+  assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW1] -force
 
 
 # Connect JTAG signals to PS GPIO pins
@@ -551,7 +542,7 @@ add_files -norecurse $outputDir/caliptra_fpga_project.gen/sources_1/bd/caliptra_
 update_compile_order -fileset sources_1
 
 # Assign the gated clock conversion setting in the caliptra_package_top out of context run.
-create_ip_run [get_files *.bd]
+create_ip_run [get_files *caliptra_fpga_project_bd.bd]
 set_property STEPS.SYNTH_DESIGN.ARGS.GATED_CLOCK_CONVERSION $GATED_CLOCK_CONVERSION [get_runs caliptra_fpga_project_bd_caliptra_package_top_0_0_synth_1]
 
 # The FPGA loading methods currently in use require the bin file to be generated.
@@ -559,9 +550,8 @@ if {$BOARD eq "ZCU104"} {
   set_property STEPS.WRITE_BITSTREAM.ARGS.BIN_FILE true [get_runs impl_1]
 }
 
-# Place DDR MC pins... why wasn't this automatic? Is this right?
-place_ports {ddr4_dimm1_act_n[0]} AR47 {ddr4_dimm1_adr[0]} AL46 {ddr4_dimm1_adr[10]} AL42 {ddr4_dimm1_adr[11]} AK38 {ddr4_dimm1_adr[12]} AN42 {ddr4_dimm1_adr[13]} AU45 {ddr4_dimm1_adr[14]} AK39 {ddr4_dimm1_adr[15]} AK40 {ddr4_dimm1_adr[16]} AL44 {ddr4_dimm1_adr[1]} AU44 {ddr4_dimm1_adr[2]} AR44 {ddr4_dimm1_adr[3]} AM41 {ddr4_dimm1_adr[4]} AL41 {ddr4_dimm1_adr[5]} AL37 {ddr4_dimm1_adr[6]} AM38 {ddr4_dimm1_adr[7]} AP43 {ddr4_dimm1_adr[8]} AN47 {ddr4_dimm1_adr[9]} AT44 {ddr4_dimm1_ba[0]} AN43 {ddr4_dimm1_ba[1]} AL47 {ddr4_dimm1_bg[0]} AP42 {ddr4_dimm1_bg[1]} AT47 {ddr4_dimm1_ck_c[0]} AT46 {ddr4_dimm1_ck_t[0]} AR46 {ddr4_dimm1_cke[0]} AR45 {ddr4_dimm1_cs_n[0]} AL43 {ddr4_dimm1_dm_n[0]} BC41 {ddr4_dimm1_dm_n[1]} BB43 {ddr4_dimm1_dm_n[2]} BB44 {ddr4_dimm1_dm_n[3]} AR42 {ddr4_dimm1_dm_n[4]} AH46 {ddr4_dimm1_dm_n[5]} AH45 {ddr4_dimm1_dm_n[6]} AG41 {ddr4_dimm1_dm_n[7]} AG39 {ddr4_dimm1_dq[0]} BE41 {ddr4_dimm1_dq[10]} AV42 {ddr4_dimm1_dq[11]} AV43 {ddr4_dimm1_dq[12]} BE42 {ddr4_dimm1_dq[13]} BD42 {ddr4_dimm1_dq[14]} AW43 {ddr4_dimm1_dq[15]} AW42 {ddr4_dimm1_dq[16]} BD45 {ddr4_dimm1_dq[17]} BC45 {ddr4_dimm1_dq[18]} AV45 {ddr4_dimm1_dq[19]} AW44 {ddr4_dimm1_dq[1]} BF41 {ddr4_dimm1_dq[20]} BD44 {ddr4_dimm1_dq[21]} BE45 {ddr4_dimm1_dq[22]} AW45 {ddr4_dimm1_dq[23]} AY44 {ddr4_dimm1_dq[24]} AM37 {ddr4_dimm1_dq[25]} AN38 {ddr4_dimm1_dq[26]} AR39 {ddr4_dimm1_dq[27]} AT39 {ddr4_dimm1_dq[28]} AT40 {ddr4_dimm1_dq[29]} AT41 {ddr4_dimm1_dq[2]} AV41 {ddr4_dimm1_dq[30]} AP39 {ddr4_dimm1_dq[31]} AN40 {ddr4_dimm1_dq[32]} AJ47 {ddr4_dimm1_dq[33]} AH47 {ddr4_dimm1_dq[34]} AE46 {ddr4_dimm1_dq[35]} AD45 {ddr4_dimm1_dq[36]} AK47 {ddr4_dimm1_dq[37]} AK46 {ddr4_dimm1_dq[38]} AE47 {ddr4_dimm1_dq[39]} AD47 {ddr4_dimm1_dq[3]} AU41 {ddr4_dimm1_dq[40]} AJ45 {ddr4_dimm1_dq[41]} AJ44 {ddr4_dimm1_dq[42]} AE44 {ddr4_dimm1_dq[43]} AD44 {ddr4_dimm1_dq[44]} AK45 {ddr4_dimm1_dq[45]} AK44 {ddr4_dimm1_dq[46]} AE45 {ddr4_dimm1_dq[47]} AF44 {ddr4_dimm1_dq[48]} AH41 {ddr4_dimm1_dq[49]} AH40 {ddr4_dimm1_dq[4]} BG41 {ddr4_dimm1_dq[50]} AD40 {ddr4_dimm1_dq[51]} AC39 {ddr4_dimm1_dq[52]} AH39 {ddr4_dimm1_dq[53]} AJ40 {ddr4_dimm1_dq[54]} AD41 {ddr4_dimm1_dq[55]} AE40 {ddr4_dimm1_dq[56]} AG37 {ddr4_dimm1_dq[57]} AH38 {ddr4_dimm1_dq[58]} AD37 {ddr4_dimm1_dq[59]} AC37 {ddr4_dimm1_dq[5]} BF42 {ddr4_dimm1_dq[60]} AH37 {ddr4_dimm1_dq[61]} AJ38 {ddr4_dimm1_dq[62]} AD39 {ddr4_dimm1_dq[63]} AD38 {ddr4_dimm1_dq[6]} AW41 {ddr4_dimm1_dq[7]} AW40 {ddr4_dimm1_dq[8]} BC42 {ddr4_dimm1_dq[9]} BC43 {ddr4_dimm1_dqs_c[0]} BA41 {ddr4_dimm1_dqs_c[1]} BA43 {ddr4_dimm1_dqs_c[2]} BA44 {ddr4_dimm1_dqs_c[3]} AP41 {ddr4_dimm1_dqs_c[4]} AF46 {ddr4_dimm1_dqs_c[5]} AG44 {ddr4_dimm1_dqs_c[6]} AF40 {ddr4_dimm1_dqs_c[7]} AF37 {ddr4_dimm1_dqs_t[0]} AY41 {ddr4_dimm1_dqs_t[1]} AY42 {ddr4_dimm1_dqs_t[2]} AY45 {ddr4_dimm1_dqs_t[3]} AP40 {ddr4_dimm1_dqs_t[4]} AF47 {ddr4_dimm1_dqs_t[5]} AH43 {ddr4_dimm1_dqs_t[6]} AF39 {ddr4_dimm1_dqs_t[7]} AE38 {ddr4_dimm1_odt[0]} AM39 {ddr4_dimm1_reset_n[0]} AD42 {ddr4_dimm1_sma_clk_clk_n[0]} AF43 {ddr4_dimm1_sma_clk_clk_p[0]} AE42
-
+# Add DDR pin placement constraints
+add_files -fileset constrs_1 $fpgaDir/src/ddr4_constraints.xdc
 
 # Start build
 if {$BUILD} {
