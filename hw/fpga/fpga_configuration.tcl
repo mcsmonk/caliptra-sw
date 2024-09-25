@@ -18,6 +18,7 @@ set ITRNG TRUE
 set CG_EN FALSE
 set RTL_VERSION latest
 set BOARD ZCU104
+set APB FALSE
 foreach arg $argv {
     regexp {(.*)=(.*)} $arg fullmatch option value
     set $option "$value"
@@ -50,6 +51,9 @@ if {$CG_EN} {
 if {$ITRNG} {
   # Add option to use Caliptra's internal TRNG instead of ETRNG
   lappend VERILOG_OPTIONS CALIPTRA_INTERNAL_TRNG
+}
+if {$APB} {
+  lappend VERILOG_OPTIONS CALIPTRA_APB
 }
 
 # Start the Vivado GUI for interactive debug
@@ -114,11 +118,19 @@ set_property include_dirs $rtlDir/src/integration/rtl [current_fileset]
 
 
 # Set caliptra_package_top as top in case next steps fail so that the top is something useful.
-set_property top caliptra_package_top [current_fileset]
+if {$APB} {
+  set_property top caliptra_package_apb_top [current_fileset]
+} else {
+  set_property top caliptra_package_axi_top [current_fileset]
+}
 
 # Create block diagram that includes an instance of caliptra_package_top
 create_bd_design "caliptra_package_bd"
-create_bd_cell -type module -reference caliptra_package_top caliptra_package_top_0
+if {$APB} {
+  create_bd_cell -type module -reference caliptra_package_apb_top caliptra_package_top_0
+} else {
+  create_bd_cell -type module -reference caliptra_package_axi_top caliptra_package_top_0
+}
 save_bd_design
 close_bd_design [get_bd_designs caliptra_package_bd]
 
@@ -129,7 +141,10 @@ ipx::edit_ip_in_project -upgrade true -name tmp_edit_project -directory $package
 ipx::infer_bus_interfaces xilinx.com:interface:apb_rtl:1.0 [ipx::current_core]
 ipx::infer_bus_interfaces xilinx.com:interface:bram_rtl:1.0 [ipx::current_core]
 ipx::add_bus_parameter MASTER_TYPE [ipx::get_bus_interfaces axi_bram -of_objects [ipx::current_core]]
-ipx::associate_bus_interfaces -busif S_AXI -clock core_clk [ipx::current_core]
+ipx::associate_bus_interfaces -busif S_AXI_WRAPPER -clock core_clk [ipx::current_core]
+ipx::associate_bus_interfaces -busif S_AXI_CALIPTRA -clock core_clk [ipx::current_core]
+ipx::associate_bus_interfaces -busif axi_bram -clock axi_bram_clk [ipx::current_core]
+set_property name caliptra_package_top [ipx::current_core]
 set_property core_revision 1 [ipx::current_core]
 ipx::update_source_project_archive -component [ipx::current_core]
 ipx::create_xgui_files [ipx::current_core]
@@ -451,12 +466,15 @@ set_property -dict [list \
   CONFIG.NUM_SI {1} \
 ] [get_bd_cells axi_interconnect_0]
 
-# Add AXI APB Bridge for Caliptra
-create_bd_cell -type ip -vlnv xilinx.com:ip:axi_apb_bridge:3.0 axi_apb_bridge_0
-set_property -dict [list \
-  CONFIG.C_APB_NUM_SLAVES {1} \
-  CONFIG.C_M_APB_PROTOCOL {apb4} \
-] [get_bd_cells axi_apb_bridge_0]
+if {$APB} {
+  # Add AXI APB Bridge for Caliptra 1.x
+  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_apb_bridge:3.0 axi_apb_bridge_0
+  set_property -dict [list \
+    CONFIG.C_APB_NUM_SLAVES {1} \
+    CONFIG.C_M_APB_PROTOCOL {apb4} \
+  ] [get_bd_cells axi_apb_bridge_0]
+  set_property location {3 1041 439} [get_bd_cells axi_apb_bridge_0]
+}
 
 # Add AXI BRAM Controller for backdoor access to IMEM
 create_bd_cell -type ip -vlnv xilinx.com:ip:axi_bram_ctrl:4.1 axi_bram_ctrl_0
@@ -475,12 +493,13 @@ set_property location {4 1335 456} [get_bd_cells caliptra_package_top_0]
 
 # Create AXI bus connections
 connect_bd_intf_net [get_bd_intf_pins axi_interconnect_0/S00_AXI] [get_bd_intf_pins $ps_m_axi]
-# AXI for FPGA wrapper registers
-connect_bd_intf_net [get_bd_intf_pins axi_interconnect_0/M00_AXI] [get_bd_intf_pins caliptra_package_top_0/S_AXI]
-# AXI to APB for Caliptra
-connect_bd_intf_net [get_bd_intf_pins axi_interconnect_0/M01_AXI] [get_bd_intf_pins axi_apb_bridge_0/AXI4_LITE]
-connect_bd_intf_net [get_bd_intf_pins axi_apb_bridge_0/APB_M] [get_bd_intf_pins caliptra_package_top_0/s_apb]
-# AXI connection to program ROM
+connect_bd_intf_net [get_bd_intf_pins axi_interconnect_0/M00_AXI] [get_bd_intf_pins caliptra_package_top_0/S_AXI_WRAPPER]
+if {$APB} {
+  connect_bd_intf_net [get_bd_intf_pins axi_interconnect_0/M01_AXI] [get_bd_intf_pins axi_apb_bridge_0/AXI4_LITE]
+  connect_bd_intf_net [get_bd_intf_pins axi_apb_bridge_0/APB_M] [get_bd_intf_pins caliptra_package_top_0/s_apb]
+} else {
+  connect_bd_intf_net [get_bd_intf_pins axi_interconnect_0/M01_AXI] [get_bd_intf_pins caliptra_package_top_0/S_AXI_CALIPTRA]
+}
 connect_bd_intf_net [get_bd_intf_pins axi_interconnect_0/M02_AXI] [get_bd_intf_pins axi_bram_ctrl_0/S_AXI]
 connect_bd_intf_net [get_bd_intf_pins caliptra_package_top_0/axi_bram] [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTA]
 
@@ -490,7 +509,7 @@ connect_bd_net -net proc_sys_reset_0_peripheral_aresetn \
   [get_bd_pins proc_sys_reset_0/peripheral_aresetn] \
   [get_bd_pins axi_apb_bridge_0/s_axi_aresetn] \
   [get_bd_pins axi_interconnect_0/aresetn] \
-  [get_bd_pins caliptra_package_top_0/S_AXI_ARESETN] \
+  [get_bd_pins caliptra_package_top_0/S_AXI_WRAPPER_ARESETN] \
   [get_bd_pins axi_bram_ctrl_0/s_axi_aresetn]
 # Create clock connections
 connect_bd_net -net ps_0_pl0_ref_clk \
@@ -503,6 +522,15 @@ connect_bd_net -net ps_0_pl0_ref_clk \
   [get_bd_pins axi_bram_ctrl_0/s_axi_aclk]
 
 # Create address segments
+if {$BOARD eq "ZCU104"} {
+  assign_bd_address -offset 0x80000000 -range 0x00002000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI_WRAPPER/reg0] -force
+  assign_bd_address -offset 0x82000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
+  if {$APB} {
+    assign_bd_address -offset 0x90000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/s_apb/Reg] -force
+  } else {
+    assign_bd_address -offset 0x90000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs caliptra_package_top_0/S_AXI_CALIPTRA/reg0] -force
+  }
+} else {
   # Create address segments
   assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S06_AXI/C1_DDR_LOW0] -force
   assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/FPD_AXI_NOC_0] [get_bd_addr_segs axi_noc_0/S06_AXI/C1_DDR_LOW1] -force
@@ -523,7 +551,12 @@ connect_bd_net -net ps_0_pl0_ref_clk \
   assign_bd_address -offset 0xA4200000 -range 0x00002000 -target_address_space [get_bd_addr_spaces ps_0/M_AXI_FPD] [get_bd_addr_segs caliptra_package_top_0/S_AXI/reg0] -force
   assign_bd_address -offset 0x00000000 -range 0x80000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW0] -force
   assign_bd_address -offset 0x000800000000 -range 0x000180000000 -target_address_space [get_bd_addr_spaces ps_0/PMC_NOC_AXI_0] [get_bd_addr_segs axi_noc_0/S05_AXI/C0_DDR_LOW1] -force
+}
 
+if {$JTAG} {
+  # Connect JTAG signals to PS GPIO pins
+  connect_bd_net [get_bd_pins caliptra_package_top_0/jtag_out] [get_bd_pins zynq_ultra_ps_e_0/emio_gpio_i]
+  connect_bd_net [get_bd_pins caliptra_package_top_0/jtag_in]  [get_bd_pins zynq_ultra_ps_e_0/emio_gpio_o]
 
 # Connect JTAG signals to PS GPIO pins
 connect_bd_net [get_bd_pins caliptra_package_top_0/jtag_out] [get_bd_pins $ps_gpio_i]
@@ -548,10 +581,11 @@ set_property STEPS.SYNTH_DESIGN.ARGS.GATED_CLOCK_CONVERSION $GATED_CLOCK_CONVERS
 # The FPGA loading methods currently in use require the bin file to be generated.
 if {$BOARD eq "ZCU104"} {
   set_property STEPS.WRITE_BITSTREAM.ARGS.BIN_FILE true [get_runs impl_1]
-}
+} else {
 
-# Add DDR pin placement constraints
-add_files -fileset constrs_1 $fpgaDir/src/ddr4_constraints.xdc
+  # Add DDR pin placement constraints
+  add_files -fileset constrs_1 $fpgaDir/src/ddr4_constraints.xdc
+}
 
 # Start build
 if {$BUILD} {
