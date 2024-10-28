@@ -53,7 +53,7 @@ impl From<DeviceLifecycle> for u32 {
     }
 }
 
-#[derive(Copy, Clone, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct SecurityState(u32);
 impl From<u32> for SecurityState {
     fn from(value: u32) -> Self {
@@ -85,14 +85,6 @@ impl SecurityState {
     pub fn set_device_lifecycle(&mut self, val: DeviceLifecycle) -> &mut Self {
         self.0 |= (val as u32) & 0x3;
         self
-    }
-}
-impl std::fmt::Debug for SecurityState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SecurityState")
-            .field("debug_locked", &self.debug_locked())
-            .field("device_lifecycle", &self.device_lifecycle())
-            .finish()
     }
 }
 
@@ -166,7 +158,7 @@ impl TryFrom<u32> for U4 {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Fuses {
     pub uds_seed: [u32; 12],
     pub field_entropy: [u32; 8],

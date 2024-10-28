@@ -411,33 +411,49 @@ impl<'a, Model: HwModel> MailboxRecvTxn<'a, Model> {
     }
 }
 
-fn mbox_read_fifo(mbox: mbox::RegisterBlock<impl MmioMut>) -> Vec<u8> {
-    let mut dlen = mbox.dlen().read();
-    let mut result = vec![];
-    while dlen >= 4 {
-        result.extend_from_slice(&mbox.dataout().read().to_le_bytes());
-        dlen -= 4;
+pub fn mbox_read_fifo(
+    mbox: mbox::RegisterBlock<impl MmioMut>,
+    buf: &mut [u8],
+) -> core::result::Result<(), CaliptraApiError> {
+    use zerocopy::Unalign;
+
+    fn dequeue_words(mbox: &mbox::RegisterBlock<impl MmioMut>, buf: &mut [Unalign<u32>]) {
+        for word in buf.iter_mut() {
+            *word = Unalign::new(mbox.dataout().read());
+        }
     }
-    if dlen > 0 {
-        // Unwrap cannot panic because dlen is less than 4
-        result.extend_from_slice(
-            &mbox.dataout().read().to_le_bytes()[..usize::try_from(dlen).unwrap()],
-        );
+
+    let dlen_bytes = mbox.dlen().read() as usize;
+
+    let buf = buf
+        .get_mut(..dlen_bytes)
+        .ok_or(CaliptraApiError::UnableToReadMailbox)?;
+
+    let len_words = buf.len() / size_of::<u32>();
+    let (mut buf_words, suffix) = LayoutVerified::new_slice_unaligned_from_prefix(buf, len_words)
+        .ok_or(CaliptraApiError::ReadBuffTooSmall)?;
+    dequeue_words(&mbox, &mut buf_words);
+    if !suffix.is_empty() {
+        let last_word = mbox.dataout().read();
+        let suffix_len = suffix.len();
+        suffix
+            .as_bytes_mut()
+            .copy_from_slice(&last_word.as_bytes()[..suffix_len]);
     }
-    result
+    Ok(())
 }
 
 pub fn mbox_write_fifo(
     mbox: &mbox::RegisterBlock<impl MmioMut>,
     buf: &[u8],
-) -> Result<(), ModelError> {
+) -> core::result::Result<(), CaliptraApiError> {
     const MAILBOX_SIZE: u32 = 128 * 1024;
 
     let Ok(input_len) = u32::try_from(buf.len()) else {
-        return Err(ModelError::BufferTooLargeForMailbox);
+        return Err(CaliptraApiError::BufferTooLargeForMailbox);
     };
     if input_len > MAILBOX_SIZE {
-        return Err(ModelError::BufferTooLargeForMailbox);
+        return Err(CaliptraApiError::BufferTooLargeForMailbox);
     }
     mbox.dlen().write(|_| input_len);
 
@@ -531,15 +547,26 @@ pub trait HwModel {
                 .write(|_| reg);
         }
 
-        // Set up the PAUSER as valid for the mailbox (using index 0)
-        self.soc_ifc()
-            .cptra_mbox_valid_pauser()
-            .at(0)
-            .write(|_| boot_params.valid_pauser);
-        self.soc_ifc()
-            .cptra_mbox_pauser_lock()
-            .at(0)
-            .write(|w| w.lock(true));
+        for (idx, apb_pauser) in apb_pausers.iter().enumerate() {
+            if self
+                .soc_ifc()
+                .cptra_mbox_pauser_lock()
+                .at(idx)
+                .read()
+                .lock()
+            {
+                return Err(CaliptraApiError::UnableToSetPauser);
+            }
+
+            self.soc_ifc()
+                .cptra_mbox_valid_pauser()
+                .at(idx)
+                .write(|_| *apb_pauser);
+            self.soc_ifc()
+                .cptra_mbox_pauser_lock()
+                .at(idx)
+                .write(|w| w.lock(true));
+        }
 
         writeln!(self.output().logger(), "writing to cptra_bootfsm_go")?;
         self.soc_ifc().cptra_bootfsm_go().write(|w| w.go(true));
@@ -614,22 +641,18 @@ pub trait HwModel {
     /// should come via a caliptra_top wire rather than an APB register.
     fn ready_for_fw(&self) -> bool;
 
-    /// Initializes the fuse values and locks them in until the next reset. This
-    /// function can only be called during early boot, shortly after the model
-    /// is created with `new_unbooted()`.
+    /// Initializes the fuse values and locks them in until the next reset.
     ///
-    /// # Panics
+    /// # Errors
     ///
     /// If the cptra_fuse_wr_done has already been written, or the
     /// hardware prevents cptra_fuse_wr_done from being set.
-    fn init_fuses(&mut self, fuses: &Fuses) {
-        if !self.soc_ifc().cptra_reset_reason().read().warm_reset() {
-            assert!(
-                !self.soc_ifc().cptra_fuse_wr_done().read().done(),
-                "Fuses are already locked in place (according to cptra_fuse_wr_done)"
-            );
+    fn init_fuses(&mut self, fuses: &Fuses) -> Result<(), CaliptraApiError> {
+        if !self.soc_ifc().cptra_reset_reason().read().warm_reset()
+            && self.soc_ifc().cptra_fuse_wr_done().read().done()
+        {
+            return Err(CaliptraApiError::FusesAlreadyIniitalized);
         }
-        println!("Initializing fuses: {:#x?}", fuses);
 
         self.soc_ifc().fuse_uds_seed().write(&fuses.uds_seed);
         self.soc_ifc()
@@ -671,7 +694,10 @@ pub trait HwModel {
             .write(|w| w.soc_stepping_id(fuses.soc_stepping_id.into()));
 
         self.soc_ifc().cptra_fuse_wr_done().write(|w| w.done(true));
-        assert!(self.soc_ifc().cptra_fuse_wr_done().read().done());
+        if !self.soc_ifc().cptra_fuse_wr_done().read().done() {
+            return Err(CaliptraApiError::FuseDoneNotSet);
+        }
+        Ok(())
     }
 
     fn step_until_exit_success(&mut self) -> std::io::Result<()> {
@@ -814,48 +840,44 @@ pub trait HwModel {
 
     /// A register block that can be used to manipulate the soc_ifc peripheral
     /// over the simulated SoC->Caliptra APB bus.
-    fn soc_ifc(&mut self) -> caliptra_registers::soc_ifc::RegisterBlock<BusMmio<Self::TBus<'_>>> {
+    fn soc_ifc(&mut self) -> caliptra_registers::soc_ifc::RegisterBlock<Self::TMmio<'_>> {
         unsafe {
             caliptra_registers::soc_ifc::RegisterBlock::new_with_mmio(
-                0x3003_0000 as *mut u32,
-                BusMmio::new(self.apb_bus()),
+                Self::SOC_IFC_ADDR as *mut u32,
+                self.mmio_mut(),
             )
         }
     }
 
     /// A register block that can be used to manipulate the soc_ifc peripheral TRNG registers
     /// over the simulated SoC->Caliptra APB bus.
-    fn soc_ifc_trng(
-        &mut self,
-    ) -> caliptra_registers::soc_ifc_trng::RegisterBlock<BusMmio<Self::TBus<'_>>> {
+    fn soc_ifc_trng(&mut self) -> caliptra_registers::soc_ifc_trng::RegisterBlock<Self::TMmio<'_>> {
         unsafe {
             caliptra_registers::soc_ifc_trng::RegisterBlock::new_with_mmio(
-                0x3003_0000 as *mut u32,
-                BusMmio::new(self.apb_bus()),
+                Self::SOC_IFC_TRNG_ADDR as *mut u32,
+                self.mmio_mut(),
             )
         }
     }
 
     /// A register block that can be used to manipulate the mbox peripheral
     /// over the simulated SoC->Caliptra APB bus.
-    fn soc_mbox(&mut self) -> caliptra_registers::mbox::RegisterBlock<BusMmio<Self::TBus<'_>>> {
+    fn soc_mbox(&mut self) -> caliptra_registers::mbox::RegisterBlock<Self::TMmio<'_>> {
         unsafe {
             caliptra_registers::mbox::RegisterBlock::new_with_mmio(
-                0x3002_0000 as *mut u32,
-                BusMmio::new(self.apb_bus()),
+                Self::SOC_MBOX_ADDR as *mut u32,
+                self.mmio_mut(),
             )
         }
     }
 
     /// A register block that can be used to manipulate the sha512_acc peripheral
     /// over the simulated SoC->Caliptra APB bus.
-    fn soc_sha512_acc(
-        &mut self,
-    ) -> caliptra_registers::sha512_acc::RegisterBlock<BusMmio<Self::TBus<'_>>> {
+    fn soc_sha512_acc(&mut self) -> caliptra_registers::sha512_acc::RegisterBlock<Self::TMmio<'_>> {
         unsafe {
             caliptra_registers::sha512_acc::RegisterBlock::new_with_mmio(
-                0x3002_1000 as *mut u32,
-                BusMmio::new(self.apb_bus()),
+                Self::SOC_SHA512_ACC_ADDR as *mut u32,
+                self.mmio_mut(),
             )
         }
     }
@@ -927,41 +949,35 @@ pub trait HwModel {
 
     /// Executes `cmd` with request data `buf`. Returns `Ok(Some(_))` if
     /// the uC responded with data, `Ok(None)` if the uC indicated success
-    /// without data, Err(ModelError::MailboxCmdFailed) if the microcontroller
-    /// responded with an error, or other model errors if there was a problem
+    /// without data, Err(CaliptraApiError::MailboxCmdFailed) if the microcontroller
+    /// responded with an error, or other errors if there was a problem
     /// communicating with the mailbox.
-    fn mailbox_execute(
+    fn mailbox_exec<'r>(
         &mut self,
         cmd: u32,
         buf: &[u8],
-    ) -> std::result::Result<Option<Vec<u8>>, ModelError> {
-        self.start_mailbox_execute(cmd, buf)?;
-        self.finish_mailbox_execute()
+        resp_data: &'r mut [u8],
+    ) -> core::result::Result<Option<&'r [u8]>, CaliptraApiError> {
+        self.start_mailbox_exec(cmd, buf)?;
+        self.finish_mailbox_exec(resp_data)
     }
 
     /// Send a command to the mailbox but don't wait for the response
-    fn start_mailbox_execute(
+    fn start_mailbox_exec(
         &mut self,
         cmd: u32,
         buf: &[u8],
-    ) -> std::result::Result<(), ModelError> {
+    ) -> core::result::Result<(), CaliptraApiError> {
         // Read a 0 to get the lock
         if self.soc_mbox().lock().read().lock() {
-            return Err(ModelError::UnableToLockMailbox);
+            return Err(CaliptraApiError::UnableToLockMailbox);
         }
 
         // Mailbox lock value should read 1 now
         // If not, the reads are likely being blocked by the PAUSER check or some other issue
         if !(self.soc_mbox().lock().read().lock()) {
-            return Err(ModelError::UnableToReadMailbox);
+            return Err(CaliptraApiError::UnableToReadMailbox);
         }
-
-        writeln!(
-            self.output().logger(),
-            "<<< Executing mbox cmd 0x{cmd:08x} ({} bytes) from SoC",
-            buf.len(),
-        )
-        .unwrap();
 
         self.soc_mbox().cmd().write(|_| cmd);
         mbox_write_fifo(&self.soc_mbox(), buf)?;
@@ -973,22 +989,24 @@ pub trait HwModel {
     }
 
     /// Wait for the response to a previous call to `start_mailbox_execute()`.
-    fn finish_mailbox_execute(&mut self) -> std::result::Result<Option<Vec<u8>>, ModelError> {
+    fn finish_mailbox_exec<'r>(
+        &mut self,
+        resp_data: &'r mut [u8],
+    ) -> core::result::Result<Option<&'r [u8]>, CaliptraApiError> {
         // Wait for the microcontroller to finish executing
-        let mut timeout_cycles = 40000000; // 100ms @400MHz
+        let mut timeout_cycles = Self::MAX_WAIT_CYCLES; // 100ms @400MHz
         while self.soc_mbox().status().read().status().cmd_busy() {
-            self.step();
+            self.delay();
             timeout_cycles -= 1;
             if timeout_cycles == 0 {
-                return Err(ModelError::MailboxTimeout);
+                return Err(CaliptraApiError::MailboxTimeout);
             }
         }
         let status = self.soc_mbox().status().read().status();
         if status.cmd_failure() {
-            writeln!(self.output().logger(), ">>> mbox cmd response: failed").unwrap();
             self.soc_mbox().execute().write(|w| w.execute(false));
             let soc_ifc = self.soc_ifc();
-            return Err(ModelError::MailboxCmdFailed(
+            return Err(CaliptraApiError::MailboxCmdFailed(
                 if soc_ifc.cptra_fw_error_fatal().read() != 0 {
                     soc_ifc.cptra_fw_error_fatal().read()
                 } else {
@@ -997,36 +1015,20 @@ pub trait HwModel {
             ));
         }
         if status.cmd_complete() {
-            writeln!(self.output().logger(), ">>> mbox cmd response: success").unwrap();
             self.soc_mbox().execute().write(|w| w.execute(false));
             return Ok(None);
         }
         if !status.data_ready() {
-            return Err(ModelError::UnknownCommandStatus(status as u32));
+            return Err(CaliptraApiError::UnknownCommandStatus(status as u32));
         }
 
-        let dlen = self.soc_mbox().dlen().read();
-        writeln!(
-            self.output().logger(),
-            ">>> mbox cmd response data ({dlen} bytes)"
-        )
-        .unwrap();
-        let result = mbox_read_fifo(self.soc_mbox());
+        let res = mbox_read_response(self.soc_mbox(), resp_data);
 
         self.soc_mbox().execute().write(|w| w.execute(false));
 
-        if cfg!(not(feature = "fpga_realtime")) {
-            // Don't check for mbox_idle() unless the hw-model supports
-            // fine-grained timing control; the firmware may proceed to lock the
-            // mailbox shortly after the mailbox transcation finishes (for example, to
-            // test the sha2_512_384_acc peripheral).
+        let buf = res?;
 
-            // mbox_fsm_ps isn't updated immediately after execute is cleared (!?),
-            // so step an extra clock cycle to wait for fm_ps to update
-            self.step();
-            assert!(self.soc_mbox().status().read().mbox_fsm_ps().mbox_idle());
-        }
-        Ok(Some(result))
+        Ok(Some(buf))
     }
 
     /// Streams `data` to the sha512acc SoC interface. If `sha384` computes
