@@ -951,15 +951,15 @@ fn test_verify_exp() {
 
     let msg: Mldsa87Msg = MESSAGE.into();
 
-    let pub_key: [u8; 2592] = VENDOR_MLDSA_KEY_1_PUBLIC.as_bytes().try_into().unwrap();
-    let mut signature: [u8; 4628] = VENDOR_SIGNATURE.as_bytes().try_into().unwrap();
+//    let pub_key: [u8; 2592] = VENDOR_MLDSA_KEY_1_PUBLIC.as_bytes().try_into().unwrap();
+//    let mut signature: [u8; 4628] = VENDOR_SIGNATURE.as_bytes().try_into().unwrap();
 
     assert_eq!(
         ml_dsa87
             .verify(
-                &Mldsa87PubKey::from(pub_key),      // Convert to HW format.
+                &Mldsa87PubKey::from(VENDOR_MLDSA_KEY_1_PUBLIC),      // Convert to HW format.
                 &msg,                               // MSG already in HW format.
-                &Mldsa87Signature::from(signature)  // // Convert to HW format.
+                &Mldsa87Signature::from(VENDOR_SIGNATURE)  // // Convert to HW format.
             )
             .unwrap(),
         Mldsa87Result::Success
